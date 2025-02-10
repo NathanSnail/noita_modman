@@ -1,6 +1,21 @@
+use std::{
+    error::Error,
+    fs::{self, File, ReadDir},
+    io::{self, BufRead, BufReader},
+    path::Path,
+};
+
 use eframe::egui;
+use xmltree::Element;
 
 fn main() -> eframe::Result {
+    let mut app = App {
+        ..Default::default()
+    };
+    app.load_dir(Path::new(
+        "/home/nathan/.local/share/Steam/steamapps/common/Noita/mods",
+    ))
+    .unwrap();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
         ..Default::default()
@@ -11,8 +26,7 @@ fn main() -> eframe::Result {
         Box::new(|cc| {
             // This gives us image support:
             egui_extras::install_image_loaders(&cc.egui_ctx);
-
-            Ok(Box::<App>::default())
+            Ok(Box::new(app))
         }),
     )
 }
@@ -42,8 +56,12 @@ enum ModSource {
     Manual,
 }
 
+struct NormalMod {
+    enabled: bool,
+}
+
 enum ModKind {
-    Normal(bool),
+    Normal(NormalMod),
     Translation,
     Gamemode,
 }
@@ -65,6 +83,46 @@ impl Mod {
 struct App {
     search: String,
     mods: Vec<Mod>,
+}
+
+impl App {
+    fn load_dir(&mut self, dir: &Path) -> Result<(), Box<dyn Error>> {
+        for item in fs::read_dir(dir)? {
+            let item = item?;
+            let path = item.path();
+            if !path.is_dir() {
+                continue;
+            }
+            let mod_xml = path.join("mod.xml");
+            if !mod_xml.is_file() {
+                continue;
+            }
+            let file = File::open(mod_xml)?;
+            let reader = BufReader::new(file);
+            // TODO: port NXML to rust and use it here
+            let tree = Element::parse(reader)?;
+            fn get(tree: &Element, key: String, default: String) -> String {
+                if let Some(x) = tree.attributes.get(&key) {
+                    x.to_string()
+                } else {
+                    default
+                }
+            }
+            let nmod = Mod {
+                source: ModSource::Manual,
+                kind: ModKind::Normal(NormalMod { enabled: true }),
+                name: get(&tree, "name".to_owned(), "unnamed".to_owned()),
+                description: get(&tree, "description".to_owned(), "".to_owned()),
+                unsafe_api: get(
+                    &tree,
+                    "request_no_api_restrictions".to_owned(),
+                    "0".to_owned(),
+                ) == "0",
+            };
+            self.mods.push(nmod);
+        }
+        Ok(())
+    }
 }
 
 impl Default for App {
