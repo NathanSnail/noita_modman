@@ -17,13 +17,88 @@ fn main() -> eframe::Result {
     )
 }
 
-#[derive(Default)]
-struct App {}
+enum GitHost {
+    Github,
+    Gitlab,
+    Other,
+}
+
+struct GitMod {
+    remote: Option<String>,
+}
+
+struct SteamMod {
+    workshop_id: String,
+}
+
+struct ModWorkshopMod {
+    link: String,
+}
+
+enum ModSource {
+    Git(GitMod),
+    Steam(SteamMod),
+    ModWorkshop(ModWorkshopMod),
+    Manual,
+}
+
+enum ModKind {
+    Normal(bool),
+    Translation,
+    Gamemode,
+}
+
+struct Mod {
+    source: ModSource,
+    kind: ModKind,
+    name: String,
+    description: String,
+    unsafe_api: bool,
+}
+
+impl Mod {
+    fn render(&self, ui: &mut egui::Ui) {
+        ui.label(&self.name);
+    }
+}
+
+struct App {
+    search: String,
+    mods: Vec<Mod>,
+}
+
+impl Default for App {
+    fn default() -> Self {
+        return App {
+            search: "".to_owned(),
+            mods: Vec::new(),
+        };
+    }
+}
 
 impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Mod Manager");
+            ui.horizontal(|ui| {
+                ui.label("Search");
+                ui.text_edit_singleline(&mut self.search);
+            });
+            egui::SidePanel::right("right").show_inside(ui, |ui| {
+                ui.label("right");
+                egui::ScrollArea::vertical()
+                    .auto_shrink(false)
+                    .show(ui, |ui| {
+                        for i in 1..=1000 {
+                            ui.label("hi ".to_owned() + &i.to_string());
+                        }
+                    })
+            });
+            egui::CentralPanel::default().show_inside(ui, |ui| {
+                for nmod in self.mods.iter() {
+                    nmod.render(ui);
+                }
+            });
         });
     }
 }
