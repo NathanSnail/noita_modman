@@ -118,7 +118,16 @@ impl Mod {
             // to manipulate the grid
             ui.label("");
         }
-        ui.label(&self.name).on_hover_text(&self.description);
+        ui.label(&self.name).on_hover_text(
+            "(".to_owned()
+                + &self.id
+                + if &self.description != "" {
+                    ")\n\n"
+                } else {
+                    ")"
+                }
+                + &self.description,
+        );
     }
 }
 
@@ -160,6 +169,7 @@ impl App {
             let mut id = suffix.clone();
 
             let source = if is_workshop {
+                id = "".to_owned();
                 File::open(path.join("mod_id.txt"))
                     .with_context(|| format!("Workshop item {suffix} doesn't have a mod id"))?
                     .read_to_string(&mut id)
