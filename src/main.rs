@@ -6,9 +6,13 @@ use std::{
 
 use anyhow::{bail, Context};
 use eframe::egui;
+use egui::FontId;
 use xmltree::Element;
 
 const STEAM: char = '\u{E623}';
+const TRANSLATION: char = '\u{1F520}';
+const GAMEMODE: char = '\u{1F30F}';
+const NORMAL: char = '\u{1F5A5}';
 
 fn main() -> eframe::Result {
     let mut app = App {
@@ -34,6 +38,12 @@ fn main() -> eframe::Result {
         Box::new(|cc| {
             // This gives us image support:
             egui_extras::install_image_loaders(&cc.egui_ctx);
+            cc.egui_ctx.style_mut(|style| {
+                style.text_styles.insert(
+                    egui::TextStyle::Body,
+                    FontId::new(20.0, egui::FontFamily::Proportional),
+                );
+            });
             Ok(Box::new(app))
         }),
     )
@@ -118,6 +128,14 @@ impl Mod {
             // to manipulate the grid
             ui.label("");
         }
+        ui.label(
+            match &self.kind {
+                ModKind::Normal(_) => NORMAL,
+                ModKind::Translation => TRANSLATION,
+                ModKind::Gamemode => GAMEMODE,
+            }
+            .to_string(),
+        );
         ui.label(&self.name).on_hover_text(
             "(".to_owned()
                 + &self.id
@@ -205,7 +223,13 @@ impl App {
             let nmod = Mod {
                 source,
                 id,
-                kind: ModKind::Normal(NormalMod { enabled: true }),
+                kind: if get(&tree, "is_translation".to_owned(), "0".to_owned()) == "1" {
+                    ModKind::Translation
+                } else if get(&tree, "is_game_mode".to_owned(), "0".to_owned()) == "1" {
+                    ModKind::Gamemode
+                } else {
+                    ModKind::Normal(NormalMod { enabled: false })
+                },
                 name: get(&tree, "name".to_owned(), "unnamed".to_owned()),
                 description: get(&tree, "description".to_owned(), "".to_owned())
                     .replace("\\n", "\n"),
