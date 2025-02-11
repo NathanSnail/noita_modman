@@ -4,9 +4,12 @@ use std::{
     path::Path,
 };
 
-use anyhow::{bail, Context};
+use anyhow::{anyhow, bail, Context};
 use eframe::egui;
-use egui::{Color32, FontId, RichText};
+use egui::{
+    ahash::{HashSet, HashSetExt},
+    Color32, FontId, RichText,
+};
 use xmltree::Element;
 
 const STEAM: char = '\u{E623}';
@@ -15,25 +18,27 @@ const GAMEMODE: char = '\u{1F30F}';
 const NORMAL: char = '\u{1F5A5}';
 const UNSAFE: char = '\u{26A0}';
 
-fn main() -> eframe::Result {
+fn main() -> anyhow::Result<()> {
     let mut app = App {
         ..Default::default()
     };
+    let enabled_set = App::parse_enabled(BufReader::new(File::open(Path::new("/home/nathan/.local/share/Steam/steamapps/compatdata/881100/pfx/drive_c/users/steamuser/AppData/LocalLow/Nolla_Games_Noita/save00/mod_config.xml")).with_context(|| "Opening mod config")?))?;
+
     app.load_dir(
         Path::new("/home/nathan/.local/share/Steam/steamapps/common/Noita/mods"),
+        &enabled_set,
         false,
-    )
-    .unwrap();
+    )?;
     app.load_dir(
         Path::new("/home/nathan/.local/share/Steam/steamapps/workshop/content/881100"),
+        &enabled_set,
         true,
-    )
-    .unwrap();
+    )?;
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
         ..Default::default()
     };
-    eframe::run_native(
+    let result = eframe::run_native(
         "Noita Mod Manager",
         options,
         Box::new(|cc| {
@@ -47,7 +52,8 @@ fn main() -> eframe::Result {
             });
             Ok(Box::new(app))
         }),
-    )
+    );
+    result.map_err(|x| anyhow!(format!("{x:?}")))
 }
 
 enum GitHost {
@@ -96,7 +102,18 @@ struct Mod {
 }
 
 impl Mod {
-    fn render(&self, ui: &mut egui::Ui) {
+    fn render(&mut self, ui: &mut egui::Ui) {
+        let mut done_checkbox = false;
+        match &mut self.kind {
+            ModKind::Normal(normal_mod) => {
+                ui.checkbox(&mut normal_mod.enabled, "");
+                done_checkbox = true;
+            }
+            _ => {}
+        }
+        if !done_checkbox {
+            ui.horizontal(|_| {});
+        }
         let mut done_source = false;
         match &self.source {
             ModSource::Git(git_mod) => {
@@ -172,7 +189,42 @@ struct App {
 }
 
 impl App {
-    fn load_dir(&mut self, dir: &Path, is_workshop: bool) -> anyhow::Result<()> {
+    fn parse_enabled<R>(src: R) -> anyhow::Result<HashSet<String>>
+    where
+        R: Read,
+    {
+        let tree = Element::parse(src).with_context(|| "Parsing mod config failed")?;
+        let mut set = HashSet::new();
+        for child in tree.children.iter() {
+            let element = child.as_element().map(|x| Ok(x)).unwrap_or(Err(anyhow!(
+                "Couldn't convert xmlnode to element? While parsing mod config"
+            )))?;
+            if element
+                .attributes
+                .get("enabled")
+                .map(|x| Ok(x))
+                .unwrap_or(Err(anyhow!("Mod config broken, missing enabled")))?
+                == "1"
+            {
+                set.insert(
+                    element
+                        .attributes
+                        .get("name")
+                        .map(|x| Ok(x))
+                        .unwrap_or(Err(anyhow!("Mod config broken, missing name")))?
+                        .clone(),
+                );
+            }
+        }
+        Ok(set)
+    }
+
+    fn load_dir(
+        &mut self,
+        dir: &Path,
+        enabled_mods: &HashSet<String>,
+        is_workshop: bool,
+    ) -> anyhow::Result<()> {
         for item in fs::read_dir(dir)? {
             let item = item?;
             let path = item.path();
@@ -237,6 +289,8 @@ impl App {
                 ModSource::Manual
             };
 
+            let enabled = enabled_mods.contains(&id);
+
             let nmod = Mod {
                 source,
                 id,
@@ -245,7 +299,7 @@ impl App {
                 } else if get(&tree, "is_game_mode".to_owned(), "0".to_owned()) == "1" {
                     ModKind::Gamemode
                 } else {
-                    ModKind::Normal(NormalMod { enabled: false })
+                    ModKind::Normal(NormalMod { enabled })
                 },
                 name: get(&tree, "name".to_owned(), "unnamed".to_owned()),
                 description: get(&tree, "description".to_owned(), "".to_owned())
@@ -283,7 +337,7 @@ impl eframe::App for App {
                 .auto_shrink(false)
                 .show(ui, |ui| {
                     egui::Grid::new("mod_grid").striped(true).show(ui, |ui| {
-                        for nmod in self.mods.iter().filter(|x| {
+                        for nmod in self.mods.iter_mut().filter(|x| {
                             x.name.contains(&self.search) || x.id.contains(&self.search)
                         }) {
                             nmod.render(ui);
