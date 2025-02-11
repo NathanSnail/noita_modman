@@ -82,17 +82,19 @@ impl Mod {
         ui.horizontal(|ui| {
             match &self.source {
                 ModSource::Git(git_mod) => {
-                    let remote_name = git_mod.remote.clone().unwrap_or("(None)".to_owned());
+                    let remote_url = git_mod.remote.clone();
                     use egui::special_emojis::GIT;
                     use egui::special_emojis::GITHUB;
-                    ui.hyperlink_to(
-                        match git_mod.host {
-                            GitHost::Github => format!("{GITHUB} Github"),
-                            GitHost::Gitlab => format!("{GIT} Gitlab"),
-                            GitHost::Other => format!("{GIT} Remote"),
-                        },
-                        remote_name,
-                    );
+                    if let Some(url) = remote_url {
+                        ui.hyperlink_to(
+                            match git_mod.host {
+                                GitHost::Github => format!("{GITHUB} Github"),
+                                GitHost::Gitlab => format!("{GIT} Gitlab"),
+                                GitHost::Other => format!("{GIT} Remote"),
+                            },
+                            url,
+                        );
+                    }
                 }
                 _ => {}
             }
