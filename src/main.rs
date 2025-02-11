@@ -86,35 +86,34 @@ struct Mod {
 
 impl Mod {
     fn render(&self, ui: &mut egui::Ui) {
-        ui.horizontal(|ui| {
-            match &self.source {
-                ModSource::Git(git_mod) => {
-                    let remote_url = git_mod.remote.clone();
-                    use egui::special_emojis::GIT;
-                    use egui::special_emojis::GITHUB;
-                    if let Some(url) = remote_url {
-                        ui.hyperlink_to(
-                            match git_mod.host {
-                                GitHost::Github => format!("{GITHUB} Github"),
-                                GitHost::Gitlab => format!("{GIT} Gitlab"),
-                                GitHost::Other => format!("{GIT} Remote"),
-                            },
-                            url,
-                        );
-                    }
-                }
-                ModSource::Steam(steam_mod) => {
+        match &self.source {
+            ModSource::Git(git_mod) => {
+                let remote_url = git_mod.remote.clone();
+                use egui::special_emojis::GIT;
+                use egui::special_emojis::GITHUB;
+                if let Some(url) = remote_url {
                     ui.hyperlink_to(
-                        format!("{STEAM} Steam"),
-                        "https://steamcommunity.com/sharedfiles/filedetails/?id=".to_owned()
-                            + &steam_mod.workshop_id.clone(),
+                        match git_mod.host {
+                            GitHost::Github => format!("{GITHUB} Github"),
+                            GitHost::Gitlab => format!("{GIT} Gitlab"),
+                            GitHost::Other => format!("{GIT} Remote"),
+                        },
+                        url,
                     );
                 }
-
-                _ => {}
             }
-            ui.label(&self.name).on_hover_text(&self.description);
-        });
+            ModSource::Steam(steam_mod) => {
+                ui.hyperlink_to(
+                    format!("{STEAM} Steam"),
+                    "https://steamcommunity.com/sharedfiles/filedetails/?id=".to_owned()
+                        + &steam_mod.workshop_id.clone(),
+                );
+            }
+            _ => {
+                ui.label(""); // to manipulate the grid
+            }
+        }
+        ui.label(&self.name).on_hover_text(&self.description);
     }
 }
 
@@ -224,25 +223,16 @@ impl eframe::App for App {
                 ui.label("Search");
                 ui.text_edit_singleline(&mut self.search);
             });
-            egui::SidePanel::right("right").show_inside(ui, |ui| {
-                ui.label("right");
-                egui::ScrollArea::vertical()
-                    .auto_shrink(false)
-                    .show(ui, |ui| {
-                        for i in 1..=1000 {
-                            ui.label("hi ".to_owned() + &i.to_string());
-                        }
-                    })
-            });
-            egui::CentralPanel::default().show_inside(ui, |ui| {
-                egui::ScrollArea::vertical()
-                    .auto_shrink(false)
-                    .show(ui, |ui| {
+            egui::ScrollArea::vertical()
+                .auto_shrink(false)
+                .show(ui, |ui| {
+                    egui::Grid::new("mod_grid").striped(true).show(ui, |ui| {
                         for nmod in self.mods.iter() {
                             nmod.render(ui);
+                            ui.end_row();
                         }
                     });
-            });
+                });
         });
     }
 }
