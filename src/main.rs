@@ -232,7 +232,9 @@ impl eframe::App for App {
                 .auto_shrink(false)
                 .show(ui, |ui| {
                     egui::Grid::new("mod_grid").striped(true).show(ui, |ui| {
-                        for nmod in self.mods.iter() {
+                        for nmod in self.mods.iter().filter(|x| {
+                            x.name.contains(&self.search) || x.id.contains(&self.search)
+                        }) {
                             nmod.render(ui);
                             ui.end_row();
                         }
