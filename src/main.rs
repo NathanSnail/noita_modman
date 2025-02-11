@@ -6,13 +6,14 @@ use std::{
 
 use anyhow::{bail, Context};
 use eframe::egui;
-use egui::FontId;
+use egui::{Color32, FontId, RichText};
 use xmltree::Element;
 
 const STEAM: char = '\u{E623}';
-const TRANSLATION: char = '\u{1F520}';
+const TRANSLATION: char = '\u{1F4D5}';
 const GAMEMODE: char = '\u{1F30F}';
 const NORMAL: char = '\u{1F5A5}';
+const UNSAFE: char = '\u{26A0}';
 
 fn main() -> eframe::Result {
     let mut app = App {
@@ -105,37 +106,53 @@ impl Mod {
                 if let Some(url) = remote_url {
                     ui.hyperlink_to(
                         match git_mod.host {
-                            GitHost::Github => format!("{GITHUB} Github"),
-                            GitHost::Gitlab => format!("{GIT} Gitlab"),
-                            GitHost::Other => format!("{GIT} Remote"),
+                            GitHost::Github => format!("{GITHUB}"),
+                            GitHost::Gitlab => format!("{GIT}"),
+                            GitHost::Other => format!("{GIT}"),
                         },
-                        url,
-                    );
+                        &url,
+                    )
+                    .on_hover_text(match &git_mod.host {
+                        GitHost::Github => format!("Github ({url})"),
+                        GitHost::Gitlab => format!("Gitlab ({url})"),
+                        GitHost::Other => format!("Unkown remote ({url})"),
+                    });
                     done_source = true;
                 }
             }
             ModSource::Steam(steam_mod) => {
-                ui.hyperlink_to(
-                    format!("{STEAM} Steam"),
-                    "https://steamcommunity.com/sharedfiles/filedetails/?id=".to_owned()
-                        + &steam_mod.workshop_id.clone(),
-                );
+                let steam_url = "https://steamcommunity.com/sharedfiles/filedetails/?id="
+                    .to_owned()
+                    + &steam_mod.workshop_id;
+                ui.hyperlink_to(format!("{STEAM}"), &steam_url)
+                    .on_hover_text(format!("Steam ({steam_url})"));
                 done_source = true;
             }
             _ => {}
         }
         if !done_source {
             // to manipulate the grid
-            ui.label("");
+            ui.horizontal(|_| {});
         }
-        ui.label(
-            match &self.kind {
-                ModKind::Normal(_) => NORMAL,
-                ModKind::Translation => TRANSLATION,
-                ModKind::Gamemode => GAMEMODE,
+        ui.horizontal(|ui| {
+            ui.label(
+                match &self.kind {
+                    ModKind::Normal(_) => NORMAL,
+                    ModKind::Translation => TRANSLATION,
+                    ModKind::Gamemode => GAMEMODE,
+                }
+                .to_string(),
+            )
+            .on_hover_text(match &self.kind {
+                ModKind::Normal(_) => "Normal mod",
+                ModKind::Translation => "Translation mod",
+                ModKind::Gamemode => "Gamemode mod",
+            });
+            if self.unsafe_api {
+                ui.label(RichText::new(format!("{UNSAFE}")).color(Color32::from_rgb(255, 220, 40)))
+                    .on_hover_text("Unsafe mod");
             }
-            .to_string(),
-        );
+        });
         ui.label(&self.name).on_hover_text(
             "(".to_owned()
                 + &self.id
@@ -237,7 +254,7 @@ impl App {
                     &tree,
                     "request_no_api_restrictions".to_owned(),
                     "0".to_owned(),
-                ) == "0",
+                ) == "1",
             };
             self.mods.push(nmod);
         }
