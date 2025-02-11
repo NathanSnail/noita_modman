@@ -1,10 +1,10 @@
 use std::{
-    error::Error,
-    fs::{self, File, ReadDir},
-    io::{self, BufRead, BufReader},
+    fs::{self, File},
+    io::{BufReader, Read},
     path::Path,
 };
 
+use anyhow::{bail, Context};
 use eframe::egui;
 use xmltree::Element;
 
@@ -12,9 +12,10 @@ fn main() -> eframe::Result {
     let mut app = App {
         ..Default::default()
     };
-    app.load_dir(Path::new(
-        "/home/nathan/.local/share/Steam/steamapps/common/Noita/mods",
-    ))
+    app.load_dir(
+        Path::new("/home/nathan/.local/share/Steam/steamapps/common/Noita/mods"),
+        false,
+    )
     .unwrap();
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
@@ -39,6 +40,7 @@ enum GitHost {
 
 struct GitMod {
     remote: Option<String>,
+    host: GitHost,
 }
 
 struct SteamMod {
@@ -70,13 +72,32 @@ struct Mod {
     source: ModSource,
     kind: ModKind,
     name: String,
+    id: String,
     description: String,
     unsafe_api: bool,
 }
 
 impl Mod {
     fn render(&self, ui: &mut egui::Ui) {
-        ui.label(&self.name);
+        ui.horizontal(|ui| {
+            match &self.source {
+                ModSource::Git(git_mod) => {
+                    let remote_name = git_mod.remote.clone().unwrap_or("(None)".to_owned());
+                    use egui::special_emojis::GIT;
+                    use egui::special_emojis::GITHUB;
+                    ui.hyperlink_to(
+                        match git_mod.host {
+                            GitHost::Github => format!("{GITHUB} Github"),
+                            GitHost::Gitlab => format!("{GIT} Gitlab"),
+                            GitHost::Other => format!("{GIT} Remote"),
+                        },
+                        remote_name,
+                    );
+                }
+                _ => {}
+            }
+            ui.label(&self.name);
+        });
     }
 }
 
@@ -86,7 +107,7 @@ struct App {
 }
 
 impl App {
-    fn load_dir(&mut self, dir: &Path) -> Result<(), Box<dyn Error>> {
+    fn load_dir(&mut self, dir: &Path, is_workshop: bool) -> anyhow::Result<()> {
         for item in fs::read_dir(dir)? {
             let item = item?;
             let path = item.path();
@@ -97,6 +118,7 @@ impl App {
             if !mod_xml.is_file() {
                 continue;
             }
+
             let file = File::open(mod_xml)?;
             let reader = BufReader::new(file);
             // TODO: port NXML to rust and use it here
@@ -108,8 +130,50 @@ impl App {
                     default
                 }
             }
+
+            let suffix = if let Some(x) = path.file_name() {
+                x.to_string_lossy().to_string()
+            } else {
+                bail!("Item doesn't have a filename")
+            };
+            let mut id = suffix.clone();
+
+            let source = if is_workshop {
+                File::open(path.join("mod_id.txt"))
+                    .with_context(|| format!("Workshop item {suffix} doesn't have a mod id"))?
+                    .read_to_string(&mut id)
+                    .with_context(|| format!("Reading mod id for {suffix} failed"))?;
+                ModSource::Steam(SteamMod {
+                    workshop_id: suffix.clone(),
+                })
+            } else if path.join(".git").is_dir() {
+                let repo = git2::Repository::discover(path)?;
+                let remotes = repo.remotes()?;
+                let remote = repo
+                    .find_remote("origin")
+                    .ok()
+                    .map(|x| x.url().map(|x| x.to_owned()))
+                    .flatten()
+                    .or(remotes.get(0).map(|x| x.to_owned()));
+                let host = if let Some(url) = &remote {
+                    if url.contains("github") {
+                        GitHost::Github
+                    } else if url.contains("gitlab") {
+                        GitHost::Gitlab
+                    } else {
+                        GitHost::Other
+                    }
+                } else {
+                    GitHost::Other
+                };
+                ModSource::Git(GitMod { remote, host })
+            } else {
+                ModSource::Manual
+            };
+
             let nmod = Mod {
-                source: ModSource::Manual,
+                source,
+                id,
                 kind: ModKind::Normal(NormalMod { enabled: true }),
                 name: get(&tree, "name".to_owned(), "unnamed".to_owned()),
                 description: get(&tree, "description".to_owned(), "".to_owned()),
