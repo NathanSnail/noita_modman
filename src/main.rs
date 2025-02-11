@@ -8,6 +8,8 @@ use anyhow::{bail, Context};
 use eframe::egui;
 use xmltree::Element;
 
+const STEAM: char = '\u{E623}';
+
 fn main() -> eframe::Result {
     let mut app = App {
         ..Default::default()
@@ -15,6 +17,11 @@ fn main() -> eframe::Result {
     app.load_dir(
         Path::new("/home/nathan/.local/share/Steam/steamapps/common/Noita/mods"),
         false,
+    )
+    .unwrap();
+    app.load_dir(
+        Path::new("/home/nathan/.local/share/Steam/steamapps/workshop/content/881100"),
+        true,
     )
     .unwrap();
     let options = eframe::NativeOptions {
@@ -96,9 +103,17 @@ impl Mod {
                         );
                     }
                 }
+                ModSource::Steam(steam_mod) => {
+                    ui.hyperlink_to(
+                        format!("{STEAM} Steam"),
+                        "https://steamcommunity.com/sharedfiles/filedetails/?id=".to_owned()
+                            + &steam_mod.workshop_id.clone(),
+                    );
+                }
+
                 _ => {}
             }
-            ui.label(&self.name);
+            ui.label(&self.name).on_hover_text(&self.description);
         });
     }
 }
@@ -178,7 +193,8 @@ impl App {
                 id,
                 kind: ModKind::Normal(NormalMod { enabled: true }),
                 name: get(&tree, "name".to_owned(), "unnamed".to_owned()),
-                description: get(&tree, "description".to_owned(), "".to_owned()),
+                description: get(&tree, "description".to_owned(), "".to_owned())
+                    .replace("\\n", "\n"),
                 unsafe_api: get(
                     &tree,
                     "request_no_api_restrictions".to_owned(),
@@ -219,9 +235,13 @@ impl eframe::App for App {
                     })
             });
             egui::CentralPanel::default().show_inside(ui, |ui| {
-                for nmod in self.mods.iter() {
-                    nmod.render(ui);
-                }
+                egui::ScrollArea::vertical()
+                    .auto_shrink(false)
+                    .show(ui, |ui| {
+                        for nmod in self.mods.iter() {
+                            nmod.render(ui);
+                        }
+                    });
             });
         });
     }
