@@ -86,6 +86,7 @@ struct Mod {
 
 impl Mod {
     fn render(&self, ui: &mut egui::Ui) {
+        let mut done_source = false;
         match &self.source {
             ModSource::Git(git_mod) => {
                 let remote_url = git_mod.remote.clone();
@@ -100,6 +101,7 @@ impl Mod {
                         },
                         url,
                     );
+                    done_source = true;
                 }
             }
             ModSource::Steam(steam_mod) => {
@@ -108,10 +110,13 @@ impl Mod {
                     "https://steamcommunity.com/sharedfiles/filedetails/?id=".to_owned()
                         + &steam_mod.workshop_id.clone(),
                 );
+                done_source = true;
             }
-            _ => {
-                ui.label(""); // to manipulate the grid
-            }
+            _ => {}
+        }
+        if !done_source {
+            // to manipulate the grid
+            ui.label("");
         }
         ui.label(&self.name).on_hover_text(&self.description);
     }
