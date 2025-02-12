@@ -4,7 +4,9 @@ use std::{
     path::Path,
 };
 
+mod conditional;
 use anyhow::{anyhow, bail, Context};
+use conditional::Condition;
 use eframe::egui;
 use egui::{
     ahash::{HashSet, HashSetExt},
@@ -102,11 +104,20 @@ struct Mod {
 }
 
 impl Mod {
+    fn matches(&self, conditions: &[Condition]) -> bool {
+        conditions
+            .iter()
+            .map(|x| x.matches(&self))
+            .reduce(|a, b| a && b)
+            .unwrap_or(true)
+    }
+
     fn render(&mut self, ui: &mut egui::Ui) {
         let mut done_checkbox = false;
         match &mut self.kind {
             ModKind::Normal(normal_mod) => {
-                ui.checkbox(&mut normal_mod.enabled, "");
+                ui.checkbox(&mut normal_mod.enabled, "")
+                    .on_hover_text("Enabled");
                 done_checkbox = true;
             }
             _ => {}
@@ -329,17 +340,38 @@ impl eframe::App for App {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Mod Manager");
+            let cur_search = self.search.clone();
+            let conditions_err: Vec<_> = cur_search
+                .split(" ")
+                .map(|x| (x, Condition::new(x)))
+                .filter(|x| x.0 != "")
+                .collect();
+            let broken_terms: &Vec<_> = &conditions_err
+                .iter()
+                .filter(|x| x.1.is_none())
+                .map(|x| x.0)
+                .collect();
+            let conditions: &Vec<_> = &conditions_err
+                .iter()
+                .filter(|x| x.1.is_some())
+                .map(|x| x.1.clone().unwrap())
+                .collect();
             ui.horizontal(|ui| {
                 ui.label("Search");
                 ui.text_edit_singleline(&mut self.search);
+                if !broken_terms.is_empty() {
+                    ui.label("Broken search terms: ");
+                    broken_terms.iter().for_each(|x| {
+                        ui.label(x.to_string());
+                    });
+                }
             });
+
             egui::ScrollArea::vertical()
                 .auto_shrink(false)
                 .show(ui, |ui| {
                     egui::Grid::new("mod_grid").striped(true).show(ui, |ui| {
-                        for nmod in self.mods.iter_mut().filter(|x| {
-                            x.name.contains(&self.search) || x.id.contains(&self.search)
-                        }) {
+                        for nmod in self.mods.iter_mut().filter(|x| x.matches(&conditions)) {
                             nmod.render(ui);
                             ui.end_row();
                         }
