@@ -23,7 +23,9 @@ impl ConditionalVariant {
         // should probably make this better
         if pat.starts_with("e") && "enabled".starts_with(pat) {
             Some(ConditionalVariant::Enabled)
-        } else if pat.starts_with("g") && "git".starts_with(pat) {
+        } else if pat.starts_with("ga") && "gamemode".starts_with(pat) {
+            Some(ConditionalVariant::Gamemode)
+        } else if pat.starts_with("gi") && "git".starts_with(pat) {
             Some(ConditionalVariant::Git)
         } else if pat.starts_with("gith") && "github".starts_with(pat) {
             Some(ConditionalVariant::Github)
@@ -111,6 +113,10 @@ enum ConditionEnum {
 pub struct Condition(ConditionEnum);
 
 impl Condition {
+    pub fn special_terms() -> &'static str {
+        "Special terms (use with # or #!): enabled\ngamemode\ngit\ngithub\ngitlab\nmanual\nnormal\nsteam\nsafe\ntranslation"
+    }
+
     pub fn new(src: &str) -> Option<Condition> {
         match src.chars().nth(0) {
             Some(c) => {

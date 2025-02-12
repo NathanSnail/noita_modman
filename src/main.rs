@@ -358,7 +358,8 @@ impl eframe::App for App {
                 .collect();
             ui.horizontal(|ui| {
                 ui.label("Search");
-                ui.text_edit_singleline(&mut self.search);
+                ui.text_edit_singleline(&mut self.search)
+                    .on_hover_text(Condition::special_terms());
                 if !broken_terms.is_empty() {
                     ui.label("Broken search terms: ");
                     broken_terms.iter().for_each(|x| {
