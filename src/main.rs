@@ -184,6 +184,17 @@ impl Mod {
         ui.label(&self.name).on_hover_text(
             "(".to_owned()
                 + &self.id
+                + if let ModSource::Steam(_) = &self.source {
+                    // hax to fix borrow stuff
+                    " - "
+                } else {
+                    ""
+                }
+                + if let ModSource::Steam(steam_mod) = &self.source {
+                    &steam_mod.workshop_id
+                } else {
+                    ""
+                }
                 + if &self.description != "" {
                     ")\n\n"
                 } else {
