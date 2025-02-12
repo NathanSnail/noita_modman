@@ -1,5 +1,4 @@
 use crate::GitHost;
-use crate::GitMod;
 use crate::Mod;
 use crate::ModKind;
 use crate::ModSource;
