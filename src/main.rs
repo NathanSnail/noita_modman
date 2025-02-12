@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File},
-    io::{BufReader, Read},
+    io::{BufReader, Read, Write},
     path::Path,
 };
 
@@ -21,10 +21,11 @@ const NORMAL: char = '\u{1F5A5}';
 const UNSAFE: char = '\u{26A0}';
 
 fn main() -> anyhow::Result<()> {
-    let mut app = App {
-        ..Default::default()
-    };
-    let enabled_set = App::parse_enabled(BufReader::new(File::open(Path::new("/home/nathan/.local/share/Steam/steamapps/compatdata/881100/pfx/drive_c/users/steamuser/AppData/LocalLow/Nolla_Games_Noita/save00/mod_config.xml")).with_context(|| "Opening mod config")?))?;
+    let mod_config = Path::new("/home/nathan/.local/share/Steam/steamapps/compatdata/881100/pfx/drive_c/users/steamuser/AppData/LocalLow/Nolla_Games_Noita/save00/mod_config.xml");
+    let mut app = App::new(&mod_config);
+    let enabled_set = App::parse_enabled(BufReader::new(
+        File::open(&mod_config).with_context(|| "Opening mod config")?,
+    ))?;
 
     app.load_dir(
         Path::new("/home/nathan/.local/share/Steam/steamapps/common/Noita/mods"),
@@ -101,6 +102,8 @@ struct Mod {
     id: String,
     description: String,
     unsafe_api: bool,
+    /// this is just needed for saving as we loaded it
+    settings_fold_open: bool,
 }
 
 impl Mod {
@@ -205,12 +208,13 @@ impl Mod {
     }
 }
 
-struct App {
+struct App<'a> {
     search: String,
+    mod_config: &'a Path,
     mods: Vec<Mod>,
 }
 
-impl App {
+impl App<'_> {
     fn parse_enabled<R>(src: R) -> anyhow::Result<HashSet<String>>
     where
         R: Read,
@@ -273,16 +277,16 @@ impl App {
             let suffix = if let Some(x) = path.file_name() {
                 x.to_string_lossy().to_string()
             } else {
-                bail!("Item doesn't have a filename")
+                bail!("Path doesn't have a filename???")
             };
             let mut id = suffix.clone();
 
             let source = if is_workshop {
                 id = "".to_owned();
                 File::open(path.join("mod_id.txt"))
-                    .with_context(|| format!("Workshop item {suffix} doesn't have a mod id"))?
+                    .with_context(|| format!("Opening mod_id.txt for {suffix}"))?
                     .read_to_string(&mut id)
-                    .with_context(|| format!("Reading mod id for {suffix} failed"))?;
+                    .with_context(|| format!("Reading mod_id.txt for {suffix}"))?;
                 ModSource::Steam(SteamMod {
                     workshop_id: suffix.clone(),
                 })
@@ -323,6 +327,8 @@ impl App {
                 } else {
                     ModKind::Normal(NormalMod { enabled })
                 },
+                settings_fold_open: get(&tree, "settings_fold_open".to_string(), "0".to_owned())
+                    == "1",
                 name: get(&tree, "name".to_owned(), "unnamed".to_owned()),
                 description: get(&tree, "description".to_owned(), "".to_owned())
                     .replace("\\n", "\n"),
@@ -338,19 +344,47 @@ impl App {
     }
 }
 
-impl Default for App {
-    fn default() -> Self {
+impl App<'_> {
+    pub fn new<'a>(mod_config: &'a Path) -> App<'a> {
         return App {
+            mod_config,
             search: "".to_owned(),
             mods: Vec::new(),
         };
     }
 }
 
-impl eframe::App for App {
+impl eframe::App for App<'_> {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Mod Manager");
+            if ui.button("Save").on_hover_text("Save mod config for use in game (requires restarting Noita)").clicked() {
+                let buf = "<Mods>\n".to_string()
+                    + &self
+                        .mods
+                        .iter()
+                        .map(|x| {
+                            let id = &x.id;
+                            let enabled = if let ModKind::Normal(normal_mod) = &x.kind {
+                                normal_mod.enabled as usize
+                            } else {
+                                0
+                            };
+                            let workshop_item_id = if let ModSource::Steam(steam_mod) = &x.source {
+                                &steam_mod.workshop_id
+                            } else {
+                                "0"
+                        };
+                            let settings_fold_open = x.settings_fold_open as usize;
+                            format!("\t<Mod enabled=\"{enabled}\" name=\"{id}\" settings_fold_open=\"{settings_fold_open}\" workshop_item_id=\"{workshop_item_id}\" />\n")
+                        })
+                        .reduce(|a, b| a + &b).unwrap_or("".to_owned()) + "</Mods>";
+                let mut file = File::create(self.mod_config)
+                    .with_context(|| "Opening mod config for saving")
+                    .unwrap();
+                write!(file, "{}", buf).with_context(|| "Writing to mod config").unwrap();
+                file.flush().with_context(|| "Flushing file").unwrap();
+            }
             let cur_search = self.search.clone();
             let conditions_err: Vec<_> = cur_search
                 .split(" ")
