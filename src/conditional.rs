@@ -72,7 +72,7 @@ impl ConditionalVariant {
                 }
             }
             ConditionalVariant::Manual => Some(matches!(nmod.source, ModSource::Manual)),
-            ConditionalVariant::Normal => Some(matches!(nmod.kind, ModKind::Gamemode)),
+            ConditionalVariant::Normal => Some(matches!(nmod.kind, ModKind::Normal(..))),
             ConditionalVariant::Steam => Some(matches!(nmod.source, ModSource::Steam(..))),
             ConditionalVariant::Safe => Some(!nmod.unsafe_api),
             ConditionalVariant::Translation => Some(matches!(nmod.kind, ModKind::Translation)),
