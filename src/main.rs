@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     fs::{self, File},
     io::{BufReader, Read, Write},
     path::Path,
@@ -8,10 +9,7 @@ mod conditional;
 use anyhow::{anyhow, bail, Context};
 use conditional::Condition;
 use eframe::egui;
-use egui::{
-    ahash::{HashSet, HashSetExt},
-    Color32, FontId, RichText,
-};
+use egui::{Color32, FontId, RichText};
 use xmltree::Element;
 
 const STEAM: char = '\u{E623}';
@@ -23,20 +21,21 @@ const UNSAFE: char = '\u{26A0}';
 fn main() -> anyhow::Result<()> {
     let mod_config = Path::new("/home/nathan/.local/share/Steam/steamapps/compatdata/881100/pfx/drive_c/users/steamuser/AppData/LocalLow/Nolla_Games_Noita/save00/mod_config.xml");
     let mut app = App::new(&mod_config);
-    let enabled_set = App::parse_enabled(BufReader::new(
+    let mod_config = App::parse_config(BufReader::new(
         File::open(&mod_config).with_context(|| "Opening mod config")?,
-    ))?;
+    ))
+    .with_context(|| "parsing mod config")?;
 
     app.load_dir(
         Path::new("/home/nathan/.local/share/Steam/steamapps/common/Noita/mods"),
-        &enabled_set,
         false,
     )?;
     app.load_dir(
         Path::new("/home/nathan/.local/share/Steam/steamapps/workshop/content/881100"),
-        &enabled_set,
         true,
     )?;
+    app.sort_mods(&mod_config)?;
+
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
         ..Default::default()
@@ -59,25 +58,30 @@ fn main() -> anyhow::Result<()> {
     result.map_err(|x| anyhow!(format!("{x:?}")))
 }
 
+#[derive(Copy, Clone, Debug)]
 enum GitHost {
     Github,
     Gitlab,
     Other,
 }
 
+#[derive(Clone, Debug)]
 struct GitMod {
     remote: Option<String>,
     host: GitHost,
 }
 
+#[derive(Clone, Debug)]
 struct SteamMod {
     workshop_id: String,
 }
 
+#[derive(Clone, Debug)]
 struct ModWorkshopMod {
     link: String,
 }
 
+#[derive(Clone, Debug)]
 enum ModSource {
     Git(GitMod),
     Steam(SteamMod),
@@ -85,16 +89,19 @@ enum ModSource {
     Manual,
 }
 
+#[derive(Copy, Clone, Debug)]
 struct NormalMod {
     enabled: bool,
 }
 
+#[derive(Copy, Clone, Debug)]
 enum ModKind {
     Normal(NormalMod),
     Translation,
     Gamemode,
 }
 
+#[derive(Clone, Debug)]
 struct Mod {
     source: ModSource,
     kind: ModKind,
@@ -214,43 +221,72 @@ struct App<'a> {
     mods: Vec<Mod>,
 }
 
+#[derive(Clone, Debug)]
+struct ModConfigItem {
+    id: String,
+    /// This is from the config, so the bool might just be nonsense if it's not a normal mod
+    enabled: bool,
+}
+
 impl App<'_> {
-    fn parse_enabled<R>(src: R) -> anyhow::Result<HashSet<String>>
+    /// call this to sort the loaded mods by a config, must have loaded some mods for this to do anything
+    fn sort_mods(&mut self, mod_config: &Vec<ModConfigItem>) -> anyhow::Result<()> {
+        let mut mod_map = HashMap::new();
+        for nmod in self.mods.iter() {
+            if mod_map.insert(nmod.id.clone(), nmod).is_some() {
+                bail!(
+                    "Duplicate mod id {} in loaded mods, mod list is broken",
+                    &nmod.id
+                );
+            }
+        }
+        let mut new_mods = Vec::new();
+        for config_item in mod_config.iter() {
+            if let Some(got_mod) = mod_map.get(&config_item.id) {
+                let mod_enabled = if let ModKind::Normal(normal_mod) = &got_mod.kind {
+                    let mut new_mod = (*got_mod).clone();
+                    let mut new_kind = *normal_mod;
+                    new_kind.enabled = config_item.enabled;
+                    new_mod.kind = ModKind::Normal(new_kind);
+                    new_mod
+                } else {
+                    (*got_mod).clone()
+                };
+                new_mods.push(mod_enabled);
+            }
+        }
+        self.mods = new_mods;
+        Ok(())
+    }
+
+    fn parse_config<R>(src: R) -> anyhow::Result<Vec<ModConfigItem>>
     where
         R: Read,
     {
         let tree = Element::parse(src).with_context(|| "Parsing mod config failed")?;
-        let mut set = HashSet::new();
+        let mut order = Vec::new();
         for child in tree.children.iter() {
-            let element = child.as_element().map(|x| Ok(x)).unwrap_or(Err(anyhow!(
-                "Couldn't convert xmlnode to element? While parsing mod config"
-            )))?;
-            if element
+            let element = child
+                .as_element()
+                .with_context(|| "Couldn't convert xmlnode to element? While parsing mod config")?;
+            let name = element
+                .attributes
+                .get("name")
+                .with_context(|| "Mod config broken, missing name")?;
+            let enabled = element
                 .attributes
                 .get("enabled")
-                .map(|x| Ok(x))
-                .unwrap_or(Err(anyhow!("Mod config broken, missing enabled")))?
-                == "1"
-            {
-                set.insert(
-                    element
-                        .attributes
-                        .get("name")
-                        .map(|x| Ok(x))
-                        .unwrap_or(Err(anyhow!("Mod config broken, missing name")))?
-                        .clone(),
-                );
-            }
+                .with_context(|| "Mod config broken, missing enabled")?
+                == "1";
+            order.push(ModConfigItem {
+                id: name.clone(),
+                enabled,
+            });
         }
-        Ok(set)
+        Ok(order)
     }
 
-    fn load_dir(
-        &mut self,
-        dir: &Path,
-        enabled_mods: &HashSet<String>,
-        is_workshop: bool,
-    ) -> anyhow::Result<()> {
+    fn load_dir(&mut self, dir: &Path, is_workshop: bool) -> anyhow::Result<()> {
         for item in fs::read_dir(dir)? {
             let item = item?;
             let path = item.path();
@@ -315,8 +351,6 @@ impl App<'_> {
                 ModSource::Manual
             };
 
-            let enabled = enabled_mods.contains(&id);
-
             let nmod = Mod {
                 source,
                 id,
@@ -325,7 +359,7 @@ impl App<'_> {
                 } else if get(&tree, "is_game_mode".to_owned(), "0".to_owned()) == "1" {
                     ModKind::Gamemode
                 } else {
-                    ModKind::Normal(NormalMod { enabled })
+                    ModKind::Normal(NormalMod { enabled: false })
                 },
                 settings_fold_open: get(&tree, "settings_fold_open".to_string(), "0".to_owned())
                     == "1",
