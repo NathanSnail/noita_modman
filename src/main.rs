@@ -2,6 +2,7 @@ use std::{
     collections::HashMap,
     fs::{self, File},
     io::{BufReader, Read, Write},
+    iter::zip,
     path::Path,
 };
 
@@ -9,7 +10,7 @@ mod conditional;
 use anyhow::{anyhow, bail, Context};
 use conditional::Condition;
 use eframe::egui;
-use egui::{Color32, FontId, RichText};
+use egui::{Color32, FontId, Id, RichText, Window};
 use xmltree::Element;
 
 const STEAM: char = '\u{E623}';
@@ -214,10 +215,31 @@ impl Mod {
     }
 }
 
+#[derive(Clone, Debug)]
+struct Popup {
+    content: String,
+    title: String,
+}
+
+impl Popup {
+    /// returns if the popup is still open
+    fn show(&self, index: usize, ctx: &egui::Context) -> bool {
+        let mut open = true;
+        Window::new(&self.title)
+            .id(Id::new(index))
+            .open(&mut open)
+            .show(ctx, |ui| {
+                ui.label(&self.content);
+            });
+        open
+    }
+}
+
 struct App<'a> {
     search: String,
     mod_config: &'a Path,
     mods: Vec<Mod>,
+    popups: Vec<Popup>,
 }
 
 #[derive(Clone, Debug)]
@@ -383,16 +405,12 @@ impl App<'_> {
             mod_config,
             search: "".to_owned(),
             mods: Vec::new(),
+            popups: Vec::new(),
         };
     }
-}
 
-impl eframe::App for App<'_> {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.heading("Mod Manager");
-            if ui.button("Save").on_hover_text("Save mod config for use in game (requires restarting Noita)").clicked() {
-                let buf = "<Mods>\n".to_string()
+    fn save_mods(&self) -> anyhow::Result<()> {
+        let buf = "<Mods>\n".to_string()
                     + &self
                         .mods
                         .iter()
@@ -412,11 +430,36 @@ impl eframe::App for App<'_> {
                             format!("\t<Mod enabled=\"{enabled}\" name=\"{id}\" settings_fold_open=\"{settings_fold_open}\" workshop_item_id=\"{workshop_item_id}\" />\n")
                         })
                         .reduce(|a, b| a + &b).unwrap_or("".to_owned()) + "</Mods>";
-                let mut file = File::create(self.mod_config)
-                    .context( "Opening mod config for saving")
-                    .unwrap();
-                write!(file, "{}", buf).context( "Writing to mod config").unwrap();
-                file.flush().context( "Flushing file").unwrap();
+        let mut file = File::create(self.mod_config).context("Opening mod config for saving")?;
+        write!(file, "{}", buf).context("Writing to mod config")?;
+        file.flush().context("Flushing file")?;
+        Ok(())
+    }
+}
+
+impl eframe::App for App<'_> {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        let mut i = 0; // yucky, need to retain + enumerate so can't use proper iterators
+        self.popups.retain(|popup| {
+            let result = popup.show(i, &ctx);
+            i += 1;
+            result
+        });
+
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.heading("Mod Manager");
+            if ui
+                .button("Save")
+                .on_hover_text("Save mod config for use in game (requires restarting Noita)")
+                .clicked()
+            {
+                if let Err(error) = self.save_mods().context("While saving mod config") {
+                    println!("Error: {error:?}");
+                    self.popups.push(Popup {
+                        title: "Error".to_owned(),
+                        content: format!("{error:?}"),
+                    });
+                }
             }
             let cur_search = self.search.clone();
             let conditions_err: Vec<_> = cur_search
