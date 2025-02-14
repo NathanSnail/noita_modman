@@ -1,5 +1,6 @@
 use std::{
     collections::HashMap,
+    error::Error,
     fs::{self, File},
     io::{BufReader, Read, Write},
     path::Path,
@@ -217,17 +218,17 @@ impl Mod {
 }
 
 #[derive(Clone, Debug)]
-struct Popup {
+struct Popup<'a> {
     content: String,
-    title: String,
+    title: &'a str,
     id: usize,
 }
 
-impl Popup {
+impl<'a> Popup<'a> {
     /// returns if the popup is still open
     fn show(&self, ctx: &egui::Context) -> bool {
         let mut open = true;
-        Window::new(&self.title)
+        Window::new(self.title)
             .id(Id::new(self.id))
             .open(&mut open)
             .show(ctx, |ui| {
@@ -237,11 +238,11 @@ impl Popup {
     }
 }
 
-struct App<'a> {
+struct App<'a, 'b> {
     search: String,
     mod_config: &'a Path,
     mods: Vec<Mod>,
-    popups: Vec<Popup>,
+    popups: Vec<Popup<'b>>,
     global_id: usize,
 }
 
@@ -252,7 +253,17 @@ struct ModConfigItem {
     enabled: bool,
 }
 
-impl App<'_> {
+impl App<'_, '_> {
+    fn create_error(&mut self, error: anyhow::Error) {
+        println!("Error: {error:?}");
+        self.popups.push(Popup {
+            title: "Error",
+            content: format!("{error:?}"),
+            id: self.global_id,
+        });
+        self.global_id += 1;
+    }
+
     /// call this to sort the loaded mods by a config, must have loaded some mods for this to do anything
     fn sort_mods(&mut self, mod_config: &Vec<ModConfigItem>) -> anyhow::Result<()> {
         let mut mod_map = HashMap::new();
@@ -405,10 +416,8 @@ impl App<'_> {
         }
         Ok(())
     }
-}
 
-impl App<'_> {
-    pub fn new<'a>(mod_config: &'a Path) -> App<'a> {
+    pub fn new<'a, 'b>(mod_config: &'a Path) -> App<'a, 'b> {
         return App {
             mod_config,
             search: "".to_owned(),
@@ -466,7 +475,7 @@ impl<T> RetainEnumerateExt<T> for Vec<T> {
     }
 }
 
-impl eframe::App for App<'_> {
+impl eframe::App for App<'_, '_> {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.popups.retain(|popup| popup.show(&ctx));
 
@@ -478,13 +487,7 @@ impl eframe::App for App<'_> {
                 .clicked()
             {
                 if let Err(error) = self.save_mods().context("While saving mod config") {
-                    println!("Error: {error:?}");
-                    self.popups.push(Popup {
-                        title: "Error".to_owned(),
-                        content: format!("{error:?}"),
-                        id: self.global_id,
-                    });
-                    self.global_id += 1;
+                    self.create_error(error);
                 }
             }
             let cur_search = self.search.clone();
@@ -498,11 +501,7 @@ impl eframe::App for App<'_> {
                 .filter(|x| x.1.is_none())
                 .map(|x| x.0)
                 .collect();
-            let conditions: &Vec<_> = &conditions_err
-                .iter()
-                .filter(|x| x.1.is_some())
-                .map(|x| x.1.clone().unwrap())
-                .collect();
+            let conditions: &Vec<_> = &conditions_err.iter().filter_map(|x| x.1.clone()).collect();
             ui.horizontal(|ui| {
                 ui.label("Search");
                 ui.text_edit_singleline(&mut self.search)
