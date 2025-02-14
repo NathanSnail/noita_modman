@@ -10,7 +10,7 @@ use anyhow::{anyhow, bail, Context};
 use conditional::Condition;
 use eframe::egui;
 use egui::{Color32, FontId, Id, RichText, Window};
-use xmltree::Element;
+use xmltree::{Element, XMLNode};
 
 const STEAM: char = '\u{E623}';
 const TRANSLATION: char = '\u{1F4D5}';
@@ -25,16 +25,18 @@ fn main() -> anyhow::Result<()> {
     let mod_config = App::parse_config(BufReader::new(
         File::open(&mod_config).context("Opening mod config")?,
     ))
-    .context("parsing mod config")?;
+    .context("Parsing mod config")?;
     app.load_dir(
         Path::new("/home/nathan/.local/share/Steam/steamapps/common/Noita/mods"),
         false,
-    )?;
+    )
+    .context("Loading main mods folder")?;
     app.load_dir(
         Path::new("/home/nathan/.local/share/Steam/steamapps/workshop/content/881100"),
         true,
-    )?;
-    app.sort_mods(&mod_config)?;
+    )
+    .context("Loading wokshop mods folder")?;
+    app.sort_mods(&mod_config).context("Sorting mods list")?;
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
@@ -262,6 +264,7 @@ impl App<'_> {
                 );
             }
         }
+
         let mut new_mods = Vec::new();
         for config_item in mod_config.iter() {
             if let Some(got_mod) = mod_map.get(&config_item.id) {
@@ -277,40 +280,44 @@ impl App<'_> {
                 new_mods.push(mod_enabled);
             }
         }
+
         self.mods = new_mods;
         Ok(())
+    }
+
+    fn parse_config_item(node: &XMLNode) -> anyhow::Result<ModConfigItem> {
+        let element = node
+            .as_element()
+            .context("Couldn't convert xmlnode to element?")?;
+        let name = element.attributes.get("name").context("Missing name")?;
+        let enabled = element
+            .attributes
+            .get("enabled")
+            .context("Missing enabled")?
+            == "1";
+        Ok(ModConfigItem {
+            id: name.clone(),
+            enabled,
+        })
     }
 
     fn parse_config<R>(src: R) -> anyhow::Result<Vec<ModConfigItem>>
     where
         R: Read,
     {
-        let tree = Element::parse(src).context("Parsing mod config failed")?;
-        let mut order = Vec::new();
-        for child in tree.children.iter() {
-            let element = child
-                .as_element()
-                .context("Couldn't convert xmlnode to element? While parsing mod config")?;
-            let name = element
-                .attributes
-                .get("name")
-                .context("Mod config broken, missing name")?;
-            let enabled = element
-                .attributes
-                .get("enabled")
-                .context("Mod config broken, missing enabled")?
-                == "1";
-            order.push(ModConfigItem {
-                id: name.clone(),
-                enabled,
-            });
-        }
-        Ok(order)
+        let tree = Element::parse(src)?;
+        tree.children
+            .iter()
+            .map(|x| Self::parse_config_item(x))
+            .try_fold(Vec::new(), |mut acc, x| {
+                acc.push(x?);
+                Ok(acc)
+            })
     }
 
     fn load_dir(&mut self, dir: &Path, is_workshop: bool) -> anyhow::Result<()> {
-        for item in fs::read_dir(dir)? {
-            let item = item?;
+        for item in fs::read_dir(dir).context("Reading mods directory")? {
+            let item = item.context("Getting directory item")?;
             let path = item.path();
             if !path.is_dir() {
                 continue;
@@ -320,10 +327,10 @@ impl App<'_> {
                 continue;
             }
 
-            let file = File::open(mod_xml)?;
+            let file = File::open(mod_xml).context("Opening mod xml")?;
             let reader = BufReader::new(file);
             // TODO: port NXML to rust and use it here
-            let tree = Element::parse(reader)?;
+            let tree = Element::parse(reader).context("Parsing mod xml")?;
             fn get(tree: &Element, key: String, default: String) -> String {
                 if let Some(x) = tree.attributes.get(&key) {
                     x.to_string()
@@ -349,8 +356,8 @@ impl App<'_> {
                     workshop_id: suffix.clone(),
                 })
             } else if path.join(".git").is_dir() {
-                let repo = git2::Repository::discover(path)?;
-                let remotes = repo.remotes()?;
+                let repo = git2::Repository::discover(path).context("Finding git repo")?;
+                let remotes = repo.remotes().context("Getting git remotes")?;
                 let remote = repo
                     .find_remote("origin")
                     .ok()
