@@ -2,7 +2,6 @@ use std::{
     collections::HashMap,
     fs::{self, File},
     io::{BufReader, Read, Write},
-    iter::zip,
     path::Path,
 };
 
@@ -219,14 +218,15 @@ impl Mod {
 struct Popup {
     content: String,
     title: String,
+    id: usize,
 }
 
 impl Popup {
     /// returns if the popup is still open
-    fn show(&self, index: usize, ctx: &egui::Context) -> bool {
+    fn show(&self, ctx: &egui::Context) -> bool {
         let mut open = true;
         Window::new(&self.title)
-            .id(Id::new(index))
+            .id(Id::new(self.id))
             .open(&mut open)
             .show(ctx, |ui| {
                 ui.label(&self.content);
@@ -240,6 +240,7 @@ struct App<'a> {
     mod_config: &'a Path,
     mods: Vec<Mod>,
     popups: Vec<Popup>,
+    global_id: usize,
 }
 
 #[derive(Clone, Debug)]
@@ -406,6 +407,7 @@ impl App<'_> {
             search: "".to_owned(),
             mods: Vec::new(),
             popups: Vec::new(),
+            global_id: 0,
         };
     }
 
@@ -437,14 +439,29 @@ impl App<'_> {
     }
 }
 
-impl eframe::App for App<'_> {
-    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
-        let mut i = 0; // yucky, need to retain + enumerate so can't use proper iterators
-        self.popups.retain(|popup| {
-            let result = popup.show(i, &ctx);
+trait RetainEnumerateExt<T> {
+    fn retain_enumerate<F>(&mut self, f: F)
+    where
+        F: FnMut(&T, usize) -> bool;
+}
+
+impl<T> RetainEnumerateExt<T> for Vec<T> {
+    fn retain_enumerate<F>(&mut self, mut f: F)
+    where
+        F: FnMut(&T, usize) -> bool,
+    {
+        let mut i: usize = 0;
+        self.retain(|e| {
+            let result = f(e, i);
             i += 1;
             result
         });
+    }
+}
+
+impl eframe::App for App<'_> {
+    fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        self.popups.retain(|popup| popup.show(&ctx));
 
         egui::CentralPanel::default().show(ctx, |ui| {
             ui.heading("Mod Manager");
@@ -458,7 +475,9 @@ impl eframe::App for App<'_> {
                     self.popups.push(Popup {
                         title: "Error".to_owned(),
                         content: format!("{error:?}"),
+                        id: self.global_id,
                     });
+                    self.global_id += 1;
                 }
             }
             let cur_search = self.search.clone();
