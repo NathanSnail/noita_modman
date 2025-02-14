@@ -326,94 +326,110 @@ impl App<'_, '_> {
             })
     }
 
-    fn load_dir(&mut self, dir: &Path, is_workshop: bool) -> anyhow::Result<()> {
-        for item in fs::read_dir(dir).context("Reading mods directory")? {
-            let item = item.context("Getting directory item")?;
-            let path = item.path();
-            if !path.is_dir() {
-                continue;
-            }
-            let mod_xml = path.join("mod.xml");
-            if !mod_xml.is_file() {
-                continue;
-            }
+    fn load_mod(path: &Path, is_workshop: bool) -> anyhow::Result<Option<Mod>> {
+        let mod_xml = path.join("mod.xml");
+        if !mod_xml.is_file() {
+            return Ok(None);
+        }
 
-            let file = File::open(mod_xml).context("Opening mod xml")?;
-            let reader = BufReader::new(file);
-            // TODO: port NXML to rust and use it here
-            let tree = Element::parse(reader).context("Parsing mod xml")?;
-            fn get(tree: &Element, key: String, default: String) -> String {
-                if let Some(x) = tree.attributes.get(&key) {
-                    x.to_string()
-                } else {
-                    default
-                }
-            }
-
-            let suffix = if let Some(x) = path.file_name() {
-                x.to_string_lossy().to_string()
+        let file = File::open(mod_xml).context("Opening mod xml")?;
+        let reader = BufReader::new(file);
+        // TODO: port NXML to rust and use it here
+        let tree = Element::parse(reader).context("Parsing mod xml")?;
+        fn get(tree: &Element, key: String, default: String) -> String {
+            if let Some(x) = tree.attributes.get(&key) {
+                x.to_string()
             } else {
-                bail!("Path doesn't have a filename???")
-            };
-            let mut id = suffix.clone();
+                default
+            }
+        }
 
-            let source = if is_workshop {
-                id = "".to_owned();
-                File::open(path.join("mod_id.txt"))
-                    .context(format!("Opening mod_id.txt for {suffix}"))?
-                    .read_to_string(&mut id)
-                    .context(format!("Reading mod_id.txt for {suffix}"))?;
-                ModSource::Steam(SteamMod {
-                    workshop_id: suffix.clone(),
-                })
-            } else if path.join(".git").is_dir() {
-                let repo = git2::Repository::discover(path).context("Finding git repo")?;
-                let remotes = repo.remotes().context("Getting git remotes")?;
-                let remote = repo
-                    .find_remote("origin")
-                    .ok()
-                    .map(|x| x.url().map(|x| x.to_owned()))
-                    .flatten()
-                    .or(remotes.get(0).map(|x| x.to_owned()));
-                let host = if let Some(url) = &remote {
-                    if url.contains("github") {
-                        GitHost::Github
-                    } else if url.contains("gitlab") {
-                        GitHost::Gitlab
-                    } else {
-                        GitHost::Other
-                    }
+        let suffix = if let Some(x) = path.file_name() {
+            x.to_string_lossy().to_string()
+        } else {
+            bail!("Path doesn't have a filename???")
+        };
+        let mut id = suffix.clone();
+
+        let source = if is_workshop {
+            id = "".to_owned();
+            File::open(path.join("mod_id.txt"))
+                .context(format!("Opening mod_id.txt for {suffix}"))?
+                .read_to_string(&mut id)
+                .context(format!("Reading mod_id.txt for {suffix}"))?;
+            ModSource::Steam(SteamMod {
+                workshop_id: suffix.clone(),
+            })
+        } else if path.join(".git").is_dir() {
+            let repo = git2::Repository::discover(path).context("Finding git repo")?;
+            let remotes = repo.remotes().context("Getting git remotes")?;
+            let remote = repo
+                .find_remote("origin")
+                .ok()
+                .map(|x| x.url().map(|x| x.to_owned()))
+                .flatten()
+                .or(remotes.get(0).map(|x| x.to_owned()));
+            let host = if let Some(url) = &remote {
+                if url.contains("github") {
+                    GitHost::Github
+                } else if url.contains("gitlab") {
+                    GitHost::Gitlab
                 } else {
                     GitHost::Other
-                };
-                ModSource::Git(GitMod { remote, host })
+                }
             } else {
-                ModSource::Manual
+                GitHost::Other
             };
+            ModSource::Git(GitMod { remote, host })
+        } else {
+            ModSource::Manual
+        };
 
-            let nmod = Mod {
-                source,
-                id,
-                kind: if get(&tree, "is_translation".to_owned(), "0".to_owned()) == "1" {
-                    ModKind::Translation
-                } else if get(&tree, "is_game_mode".to_owned(), "0".to_owned()) == "1" {
-                    ModKind::Gamemode
-                } else {
-                    ModKind::Normal(NormalMod { enabled: false })
-                },
-                settings_fold_open: get(&tree, "settings_fold_open".to_string(), "0".to_owned())
-                    == "1",
-                name: get(&tree, "name".to_owned(), "unnamed".to_owned()),
-                description: get(&tree, "description".to_owned(), "".to_owned())
-                    .replace("\\n", "\n"),
-                unsafe_api: get(
-                    &tree,
-                    "request_no_api_restrictions".to_owned(),
-                    "0".to_owned(),
-                ) == "1",
-            };
-            self.mods.push(nmod);
-        }
+        let nmod = Mod {
+            source,
+            id,
+            kind: if get(&tree, "is_translation".to_owned(), "0".to_owned()) == "1" {
+                ModKind::Translation
+            } else if get(&tree, "is_game_mode".to_owned(), "0".to_owned()) == "1" {
+                ModKind::Gamemode
+            } else {
+                ModKind::Normal(NormalMod { enabled: false })
+            },
+            settings_fold_open: get(&tree, "settings_fold_open".to_string(), "0".to_owned()) == "1",
+            name: get(&tree, "name".to_owned(), "unnamed".to_owned()),
+            description: get(&tree, "description".to_owned(), "".to_owned()).replace("\\n", "\n"),
+            unsafe_api: get(
+                &tree,
+                "request_no_api_restrictions".to_owned(),
+                "0".to_owned(),
+            ) == "1",
+        };
+        Ok(Some(nmod))
+    }
+
+    fn load_dir(&mut self, dir: &Path, is_workshop: bool) -> anyhow::Result<()> {
+        fs::read_dir(dir)
+            .context("Reading mods directory")?
+            .try_for_each::<_, anyhow::Result<()>>(|item| {
+                let item = item.context("Getting directory item")?;
+                let path = item.path();
+                if !path.is_dir() {
+                    return Ok(());
+                }
+                let nmod = Self::load_mod(&path, is_workshop).context({
+                    format!(
+                        "Loading mod with path {}",
+                        path.to_str()
+                            .context("Producing a path string from a Path")?
+                    )
+                })?;
+                {
+                    if let Some(x) = nmod {
+                        self.mods.push(x);
+                    }
+                    Ok(())
+                }
+            })?;
         Ok(())
     }
 
