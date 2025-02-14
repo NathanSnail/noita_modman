@@ -21,11 +21,11 @@ const UNSAFE: char = '\u{26A0}';
 fn main() -> anyhow::Result<()> {
     let mod_config = Path::new("/home/nathan/.local/share/Steam/steamapps/compatdata/881100/pfx/drive_c/users/steamuser/AppData/LocalLow/Nolla_Games_Noita/save00/mod_config.xml");
     let mut app = App::new(&mod_config);
-    let mod_config = App::parse_config(BufReader::new(
-        File::open(&mod_config).with_context(|| "Opening mod config")?,
-    ))
-    .with_context(|| "parsing mod config")?;
 
+    let mod_config = App::parse_config(BufReader::new(
+        File::open(&mod_config).context("Opening mod config")?,
+    ))
+    .context("parsing mod config")?;
     app.load_dir(
         Path::new("/home/nathan/.local/share/Steam/steamapps/common/Noita/mods"),
         false,
@@ -44,7 +44,6 @@ fn main() -> anyhow::Result<()> {
         "Noita Mod Manager",
         options,
         Box::new(|cc| {
-            // This gives us image support:
             egui_extras::install_image_loaders(&cc.egui_ctx);
             cc.egui_ctx.style_mut(|style| {
                 style.text_styles.insert(
@@ -263,20 +262,20 @@ impl App<'_> {
     where
         R: Read,
     {
-        let tree = Element::parse(src).with_context(|| "Parsing mod config failed")?;
+        let tree = Element::parse(src).context("Parsing mod config failed")?;
         let mut order = Vec::new();
         for child in tree.children.iter() {
             let element = child
                 .as_element()
-                .with_context(|| "Couldn't convert xmlnode to element? While parsing mod config")?;
+                .context("Couldn't convert xmlnode to element? While parsing mod config")?;
             let name = element
                 .attributes
                 .get("name")
-                .with_context(|| "Mod config broken, missing name")?;
+                .context("Mod config broken, missing name")?;
             let enabled = element
                 .attributes
                 .get("enabled")
-                .with_context(|| "Mod config broken, missing enabled")?
+                .context("Mod config broken, missing enabled")?
                 == "1";
             order.push(ModConfigItem {
                 id: name.clone(),
@@ -320,9 +319,9 @@ impl App<'_> {
             let source = if is_workshop {
                 id = "".to_owned();
                 File::open(path.join("mod_id.txt"))
-                    .with_context(|| format!("Opening mod_id.txt for {suffix}"))?
+                    .context(format!("Opening mod_id.txt for {suffix}"))?
                     .read_to_string(&mut id)
-                    .with_context(|| format!("Reading mod_id.txt for {suffix}"))?;
+                    .context(format!("Reading mod_id.txt for {suffix}"))?;
                 ModSource::Steam(SteamMod {
                     workshop_id: suffix.clone(),
                 })
@@ -414,10 +413,10 @@ impl eframe::App for App<'_> {
                         })
                         .reduce(|a, b| a + &b).unwrap_or("".to_owned()) + "</Mods>";
                 let mut file = File::create(self.mod_config)
-                    .with_context(|| "Opening mod config for saving")
+                    .context( "Opening mod config for saving")
                     .unwrap();
-                write!(file, "{}", buf).with_context(|| "Writing to mod config").unwrap();
-                file.flush().with_context(|| "Flushing file").unwrap();
+                write!(file, "{}", buf).context( "Writing to mod config").unwrap();
+                file.flush().context( "Flushing file").unwrap();
             }
             let cur_search = self.search.clone();
             let conditions_err: Vec<_> = cur_search
