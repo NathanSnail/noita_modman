@@ -68,14 +68,14 @@ impl ConditionalVariant {
                 if let ModSource::Git(source) = &nmod.source {
                     Some(matches!(source.host, GitHost::Github))
                 } else {
-                    None
+                    Some(false)
                 }
             }
             ConditionalVariant::Gitlab => {
                 if let ModSource::Git(source) = &nmod.source {
                     Some(matches!(source.host, GitHost::Gitlab))
                 } else {
-                    None
+                    Some(false)
                 }
             }
             ConditionalVariant::Manual => Some(matches!(nmod.source, ModSource::Manual)),
