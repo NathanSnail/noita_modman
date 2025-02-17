@@ -8,8 +8,8 @@ use std::{
 mod conditional;
 use anyhow::{anyhow, bail, Context};
 use conditional::Condition;
-use eframe::egui;
-use egui::{Color32, FontId, Id, RichText, Window};
+use eframe::{egui, Frame};
+use egui::{vec2, Color32, FontId, Id, RichText, Sense, Window};
 use xmltree::{Element, XMLNode};
 
 const STEAM: char = '\u{E623}';
@@ -123,96 +123,110 @@ impl Mod {
             .unwrap_or(true)
     }
 
+    // returns true if we got dragged
     fn render(&mut self, ui: &mut egui::Ui) {
-        let mut done_checkbox = false;
-        match &mut self.kind {
-            ModKind::Normal(normal_mod) => {
-                ui.checkbox(&mut normal_mod.enabled, "")
-                    .on_hover_text("Enabled");
-                done_checkbox = true;
-            }
-            _ => {}
-        }
-        if !done_checkbox {
-            ui.horizontal(|_| {});
-        }
-        let mut done_source = false;
-        match &self.source {
-            ModSource::Git(git_mod) => {
-                let remote_url = git_mod.remote.clone();
-                use egui::special_emojis::GIT;
-                use egui::special_emojis::GITHUB;
-                if let Some(url) = remote_url {
-                    ui.hyperlink_to(
-                        match git_mod.host {
-                            GitHost::Github => format!("{GITHUB}"),
-                            GitHost::Gitlab => format!("{GIT}"),
-                            GitHost::Other => format!("{GIT}"),
-                        },
-                        &url,
-                    )
-                    .on_hover_text(match &git_mod.host {
-                        GitHost::Github => format!("Github ({url})"),
-                        GitHost::Gitlab => format!("Gitlab ({url})"),
-                        GitHost::Other => format!("Unkown remote ({url})"),
-                    });
-                    done_source = true;
-                }
-            }
-            ModSource::Steam(steam_mod) => {
-                let steam_url = "https://steamcommunity.com/sharedfiles/filedetails/?id="
-                    .to_owned()
-                    + &steam_mod.workshop_id;
-                ui.hyperlink_to(format!("{STEAM}"), &steam_url)
-                    .on_hover_text(format!("Steam ({steam_url})"));
-                done_source = true;
-            }
-            _ => {}
-        }
-        if !done_source {
-            // to manipulate the grid
-            ui.horizontal(|_| {});
-        }
         ui.horizontal(|ui| {
-            ui.label(
-                match &self.kind {
-                    ModKind::Normal(_) => NORMAL,
-                    ModKind::Translation => TRANSLATION,
-                    ModKind::Gamemode => GAMEMODE,
+            let mut done_checkbox = false;
+
+            let checkbox_size = ui.style().spacing.icon_width;
+
+            match &mut self.kind {
+                ModKind::Normal(normal_mod) => {
+                    ui.checkbox(&mut normal_mod.enabled, "")
+                        .on_hover_text("Enabled");
+                    done_checkbox = true;
                 }
-                .to_string(),
-            )
-            .on_hover_text(match &self.kind {
-                ModKind::Normal(_) => "Normal mod",
-                ModKind::Translation => "Translation mod",
-                ModKind::Gamemode => "Gamemode mod",
-            });
-            if self.unsafe_api {
-                ui.label(RichText::new(format!("{UNSAFE}")).color(Color32::from_rgb(255, 220, 40)))
-                    .on_hover_text("Unsafe mod");
+                _ => {}
             }
+            if !done_checkbox {
+                ui.allocate_space(vec2(checkbox_size, 0.0));
+            }
+
+            let cursor_icon_start = ui.cursor().min.x;
+            match &self.source {
+                ModSource::Git(git_mod) => {
+                    let remote_url = git_mod.remote.clone();
+                    use egui::special_emojis::GIT;
+                    use egui::special_emojis::GITHUB;
+                    if let Some(url) = remote_url {
+                        ui.hyperlink_to(
+                            match git_mod.host {
+                                GitHost::Github => format!("{GITHUB}"),
+                                GitHost::Gitlab => format!("{GIT}"),
+                                GitHost::Other => format!("{GIT}"),
+                            },
+                            &url,
+                        )
+                        .on_hover_text(match &git_mod.host {
+                            GitHost::Github => format!("Github ({url})"),
+                            GitHost::Gitlab => format!("Gitlab ({url})"),
+                            GitHost::Other => format!("Unkown remote ({url})"),
+                        })
+                        .rect
+                        .width();
+                    }
+                }
+                ModSource::Steam(steam_mod) => {
+                    let steam_url = "https://steamcommunity.com/sharedfiles/filedetails/?id="
+                        .to_owned()
+                        + &steam_mod.workshop_id;
+                    ui.hyperlink_to(format!("{STEAM}"), &steam_url)
+                        .on_hover_text(format!("Steam ({steam_url})"))
+                        .rect
+                        .width();
+                }
+                _ => {}
+            }
+            let cursor_icon_end = ui.cursor().min.x;
+            let icons_space_to_do = 40.0 + cursor_icon_start - cursor_icon_end;
+            let (id, rect) = ui.allocate_space(vec2(icons_space_to_do, 0.0));
+            if ui.interact(rect, id, Sense::click()).clicked() {
+                println!("hi");
+            }
+
+            ui.horizontal(|ui| {
+                ui.label(
+                    match &self.kind {
+                        ModKind::Normal(_) => NORMAL,
+                        ModKind::Translation => TRANSLATION,
+                        ModKind::Gamemode => GAMEMODE,
+                    }
+                    .to_string(),
+                )
+                .on_hover_text(match &self.kind {
+                    ModKind::Normal(_) => "Normal mod",
+                    ModKind::Translation => "Translation mod",
+                    ModKind::Gamemode => "Gamemode mod",
+                });
+                if self.unsafe_api {
+                    ui.label(
+                        RichText::new(format!("{UNSAFE}")).color(Color32::from_rgb(255, 220, 40)),
+                    )
+                    .on_hover_text("Unsafe mod");
+                }
+            });
+            ui.label(&self.name).on_hover_text(
+                "(".to_owned()
+                    + &self.id
+                    + if let ModSource::Steam(_) = &self.source {
+                        // hax to fix borrow stuff
+                        " - "
+                    } else {
+                        ""
+                    }
+                    + if let ModSource::Steam(steam_mod) = &self.source {
+                        &steam_mod.workshop_id
+                    } else {
+                        ""
+                    }
+                    + if &self.description != "" {
+                        ")\n\n"
+                    } else {
+                        ")"
+                    }
+                    + &self.description,
+            );
         });
-        ui.label(&self.name).on_hover_text(
-            "(".to_owned()
-                + &self.id
-                + if let ModSource::Steam(_) = &self.source {
-                    // hax to fix borrow stuff
-                    " - "
-                } else {
-                    ""
-                }
-                + if let ModSource::Steam(steam_mod) = &self.source {
-                    &steam_mod.workshop_id
-                } else {
-                    ""
-                }
-                + if &self.description != "" {
-                    ")\n\n"
-                } else {
-                    ")"
-                }
-                + &self.description,
-        );
     }
 }
 
@@ -532,12 +546,14 @@ impl eframe::App for App<'_, '_> {
             egui::ScrollArea::vertical()
                 .auto_shrink(false)
                 .show(ui, |ui| {
-                    egui::Grid::new("mod_grid").striped(true).show(ui, |ui| {
-                        for nmod in self.mods.iter_mut().filter(|x| x.matches(&conditions)) {
-                            nmod.render(ui);
-                            ui.end_row();
-                        }
-                    });
+                    for (i, nmod) in self
+                        .mods
+                        .iter_mut()
+                        .filter(|x| x.matches(&conditions))
+                        .enumerate()
+                    {
+                        nmod.render(ui)
+                    }
                 });
         });
     }
