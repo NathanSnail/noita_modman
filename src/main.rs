@@ -179,10 +179,7 @@ impl Mod {
             }
             let cursor_icon_end = ui.cursor().min.x;
             let icons_space_to_do = 40.0 + cursor_icon_start - cursor_icon_end;
-            let (id, rect) = ui.allocate_space(vec2(icons_space_to_do, 0.0));
-            if ui.interact(rect, id, Sense::click()).clicked() {
-                println!("hi");
-            }
+            ui.allocate_space(vec2(icons_space_to_do, 0.0));
 
             ui.horizontal(|ui| {
                 ui.label(
