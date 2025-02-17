@@ -17,31 +17,39 @@ enum ConditionalVariant {
     Translation,
 }
 
+const CONDITIONS: [(&str, ConditionalVariant); 10] = [
+    ("enabled", ConditionalVariant::Enabled),
+    ("gamemode", ConditionalVariant::Gamemode),
+    ("git", ConditionalVariant::Git),
+    ("github", ConditionalVariant::Github),
+    ("gitlab", ConditionalVariant::Gitlab),
+    ("manual", ConditionalVariant::Manual),
+    ("normal", ConditionalVariant::Normal),
+    ("steam", ConditionalVariant::Steam),
+    ("safe", ConditionalVariant::Safe),
+    ("translation", ConditionalVariant::Translation),
+];
+
 impl ConditionalVariant {
     fn new(pat: &str) -> Option<ConditionalVariant> {
-        // should probably make this better
-        if pat.starts_with("e") && "enabled".starts_with(pat) {
-            Some(ConditionalVariant::Enabled)
-        } else if pat.starts_with("ga") && "gamemode".starts_with(pat) {
-            Some(ConditionalVariant::Gamemode)
-        } else if pat.starts_with("gi") && "git".starts_with(pat) {
-            Some(ConditionalVariant::Git)
-        } else if pat.starts_with("gith") && "github".starts_with(pat) {
-            Some(ConditionalVariant::Github)
-        } else if pat.starts_with("gitl") && "gitlab".starts_with(pat) {
-            Some(ConditionalVariant::Gitlab)
-        } else if pat.starts_with("m") && "manual".starts_with(pat) {
-            Some(ConditionalVariant::Manual)
-        } else if pat.starts_with("n") && "normal".starts_with(pat) {
-            Some(ConditionalVariant::Normal)
-        } else if pat.starts_with("st") && "steam".starts_with(pat) {
-            Some(ConditionalVariant::Steam)
-        } else if pat.starts_with("sa") && "safe".starts_with(pat) {
-            Some(ConditionalVariant::Safe)
-        } else if pat.starts_with("t") && "translation".starts_with(pat) {
-            Some(ConditionalVariant::Translation)
+        let matching: Vec<_> = CONDITIONS.iter().filter(|e| e.0.starts_with(pat)).collect();
+        if matching.len() == 1 {
+            Some(matching[0].1)
         } else {
-            None
+            // git prefixes github and gitlab, so it isn't searchable normally
+            let starters: Vec<_> = matching
+                .iter()
+                .filter(|e| {
+                    matching
+                        .iter()
+                        .fold(true, |acc, x| acc && x.0.starts_with(e.0))
+                })
+                .collect();
+            if starters.len() == 1 {
+                Some(starters[0].1)
+            } else {
+                None
+            }
         }
     }
 
@@ -112,8 +120,9 @@ enum ConditionEnum {
 pub struct Condition(ConditionEnum);
 
 impl Condition {
-    pub fn special_terms() -> &'static str {
-        "Special terms (use with # or #!): enabled\ngamemode\ngit\ngithub\ngitlab\nmanual\nnormal\nsteam\nsafe\ntranslation"
+    pub fn special_terms() -> String {
+        let s = "Special terms (use with # or #!):\n".to_owned();
+        CONDITIONS.iter().fold(s, |acc, e| acc + "\n" + e.0)
     }
 
     pub fn new(src: &str) -> Option<Condition> {
