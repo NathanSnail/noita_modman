@@ -10,7 +10,8 @@ use anyhow::{anyhow, bail, Context};
 use conditional::Condition;
 use eframe::{egui, Frame};
 use egui::{
-    epaint::text::cursor::Cursor, vec2, Color32, FontId, Id, Rect, RichText, Sense, Window,
+    emath, epaint::text::cursor::Cursor, vec2, Color32, DragAndDrop, FontId, Id, InnerResponse,
+    LayerId, Order, Rect, RichText, Sense, UiBuilder, Window,
 };
 use xmltree::{Element, XMLNode};
 
@@ -180,6 +181,7 @@ impl Mod {
             let icons_space_to_do = 40.0 + cursor_icon_start - cursor_icon_end;
             ui.allocate_space(vec2(icons_space_to_do, 0.0));
 
+            let cursor_type_start = ui.cursor().min.x;
             ui.horizontal(|ui| {
                 ui.label(
                     match &self.kind {
@@ -201,6 +203,10 @@ impl Mod {
                     .on_hover_text("Unsafe mod");
                 }
             });
+            let cursor_type_end = ui.cursor().min.x;
+            let types_space_to_do = 60.0 + cursor_type_start - cursor_type_end;
+            ui.allocate_space(vec2(types_space_to_do, 0.0));
+
             let hover = "(".to_owned()
                 + &self.id
                 + if let ModSource::Steam(_) = &self.source {
@@ -549,10 +555,32 @@ impl eframe::App for App<'_, '_> {
                         .filter(|x| x.matches(&conditions))
                         .enumerate()
                     {
-                        let scoped = ui.scope(|ui| nmod.render(ui)).inner;
-                        ui.interact(scoped.0, Id::new(("Modlist DND", i)), Sense::drag())
-                            .on_hover_cursor(egui::CursorIcon::Grab)
-                            .on_hover_text(scoped.1);
+                        let id = Id::new(("Modlist DND", i));
+                        let payload = i;
+                        // largely pilfered from Ui::dnd_drag_source
+                        if ui.ctx().is_being_dragged(id) {
+                            DragAndDrop::set_payload(ui.ctx(), payload);
+
+                            let layer_id = LayerId::new(Order::Tooltip, id);
+                            let response = ui
+                                .scope_builder(UiBuilder::new().layer_id(layer_id), |ui| {
+                                    nmod.render(ui)
+                                })
+                                .response;
+
+                            if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
+                                let delta = pointer_pos - response.rect.center();
+                                ui.ctx().transform_layer_shapes(
+                                    layer_id,
+                                    emath::TSTransform::from_translation(delta),
+                                );
+                            }
+                        } else {
+                            let scoped = ui.scope(|ui| nmod.render(ui)).inner;
+                            ui.interact(scoped.0, id, Sense::drag())
+                                .on_hover_cursor(egui::CursorIcon::Grab)
+                                .on_hover_text(scoped.1);
+                        }
                     }
                 });
         });
