@@ -9,7 +9,9 @@ mod conditional;
 use anyhow::{anyhow, bail, Context};
 use conditional::Condition;
 use eframe::{egui, Frame};
-use egui::{vec2, Color32, FontId, Id, RichText, Sense, Window};
+use egui::{
+    epaint::text::cursor::Cursor, vec2, Color32, FontId, Id, Rect, RichText, Sense, Window,
+};
 use xmltree::{Element, XMLNode};
 
 const STEAM: char = '\u{E623}';
@@ -123,11 +125,9 @@ impl Mod {
             .unwrap_or(true)
     }
 
-    // returns true if we got dragged
-    fn render(&mut self, ui: &mut egui::Ui) {
+    // returns the rect of the text and it's hover text for dragging
+    fn render(&mut self, ui: &mut egui::Ui) -> (Rect, String) {
         ui.horizontal(|ui| {
-            let mut done_checkbox = false;
-
             let cursor_checkbox_start = ui.cursor().min.x;
 
             match &mut self.kind {
@@ -201,28 +201,29 @@ impl Mod {
                     .on_hover_text("Unsafe mod");
                 }
             });
-            ui.label(&self.name).on_hover_text(
-                "(".to_owned()
-                    + &self.id
-                    + if let ModSource::Steam(_) = &self.source {
-                        // hax to fix borrow stuff
-                        " - "
-                    } else {
-                        ""
-                    }
-                    + if let ModSource::Steam(steam_mod) = &self.source {
-                        &steam_mod.workshop_id
-                    } else {
-                        ""
-                    }
-                    + if &self.description != "" {
-                        ")\n\n"
-                    } else {
-                        ")"
-                    }
-                    + &self.description,
-            );
-        });
+            let hover = "(".to_owned()
+                + &self.id
+                + if let ModSource::Steam(_) = &self.source {
+                    // hax to fix borrow stuff
+                    " - "
+                } else {
+                    ""
+                }
+                + if let ModSource::Steam(steam_mod) = &self.source {
+                    &steam_mod.workshop_id
+                } else {
+                    ""
+                }
+                + if &self.description != "" {
+                    ")\n\n"
+                } else {
+                    ")"
+                }
+                + &self.description;
+            let text_rect = ui.label(&self.name).rect;
+            (text_rect, hover)
+        })
+        .inner
     }
 }
 
@@ -548,7 +549,10 @@ impl eframe::App for App<'_, '_> {
                         .filter(|x| x.matches(&conditions))
                         .enumerate()
                     {
-                        nmod.render(ui)
+                        let scoped = ui.scope(|ui| nmod.render(ui)).inner;
+                        ui.interact(scoped.0, Id::new(("Modlist DND", i)), Sense::drag())
+                            .on_hover_cursor(egui::CursorIcon::Grab)
+                            .on_hover_text(scoped.1);
                     }
                 });
         });
