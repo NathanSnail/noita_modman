@@ -11,7 +11,7 @@ use conditional::Condition;
 use eframe::{egui, Frame};
 use egui::{
     emath, epaint::text::cursor::Cursor, vec2, Color32, DragAndDrop, FontId, Grid, Id,
-    InnerResponse, LayerId, Order, Rect, RichText, Sense, UiBuilder, Window,
+    InnerResponse, LayerId, Order, Pos2, Rect, RichText, Sense, UiBuilder, Window,
 };
 use xmltree::{Element, XMLNode};
 
@@ -117,6 +117,13 @@ struct Mod {
     settings_fold_open: bool,
 }
 
+#[derive(Clone, Debug)]
+struct ModRenderResponse {
+    full_rect: Rect,
+    text_rect: Rect,
+    text_hover: String,
+}
+
 impl Mod {
     fn matches(&self, conditions: &[Condition]) -> bool {
         conditions
@@ -127,8 +134,8 @@ impl Mod {
     }
 
     // returns the rect of the text and it's hover text for dragging
-    fn render(&mut self, ui: &mut egui::Ui) -> (Rect, String) {
-        ui.horizontal(|ui| {
+    fn render(&mut self, ui: &mut egui::Ui) -> ModRenderResponse {
+        let full = ui.horizontal(|ui| {
             ui.fixed_size_group(28.0, |ui| match &mut self.kind {
                 ModKind::Normal(normal_mod) => {
                     ui.checkbox(&mut normal_mod.enabled, "")
@@ -218,8 +225,12 @@ impl Mod {
                 + &self.description;
             let text_rect = ui.label(&self.name).rect;
             (text_rect, hover)
-        })
-        .inner
+        });
+        ModRenderResponse {
+            full_rect: full.response.rect,
+            text_rect: full.inner.0,
+            text_hover: full.inner.1,
+        }
     }
 }
 
@@ -250,6 +261,7 @@ struct App<'a, 'b> {
     mods: Vec<Mod>,
     popups: Vec<Popup<'b>>,
     global_id: usize,
+    row_rect: Option<Rect>,
 }
 
 #[derive(Clone, Debug)]
@@ -446,6 +458,7 @@ impl App<'_, '_> {
             mods: Vec::new(),
             popups: Vec::new(),
             global_id: 0,
+            row_rect: None,
         };
     }
 
@@ -519,6 +532,14 @@ impl eframe::App for App<'_, '_> {
         self.popups.retain(|popup| popup.show(&ctx));
 
         egui::CentralPanel::default().show(ctx, |ui| {
+            if self.row_rect == None {
+                if let Some(nmod) = self.mods.get_mut(0) {
+                    self.row_rect = Some(nmod.render(ui).full_rect);
+                    dbg!(self.row_rect);
+                    ctx.request_repaint();
+                }
+            }
+
             ui.heading("Mod Manager");
             if ui
                 .button("Save")
@@ -583,10 +604,26 @@ impl eframe::App for App<'_, '_> {
                                 );
                             }
                         } else {
-                            let scoped = ui.scope(|ui| nmod.render(ui)).inner;
-                            ui.interact(scoped.0, id, Sense::drag())
+                            let scoped = ui
+                                .scope(|ui| {
+                                    if i % 2 == 0 {
+                                        let painter = ui.painter();
+
+                                        let mut cursor = ui.cursor();
+                                        cursor.max.y =
+                                            cursor.min.y + self.row_rect.unwrap().height();
+                                        painter.rect_filled(
+                                            cursor,
+                                            0.0,
+                                            ui.visuals().faint_bg_color,
+                                        );
+                                    }
+                                    nmod.render(ui)
+                                })
+                                .inner;
+                            ui.interact(scoped.text_rect, id, Sense::drag())
                                 .on_hover_cursor(egui::CursorIcon::Grab)
-                                .on_hover_text(scoped.1);
+                                .on_hover_text(scoped.text_hover);
                         }
                     }
                 });
