@@ -10,8 +10,8 @@ use anyhow::{anyhow, bail, Context};
 use conditional::Condition;
 use eframe::{egui, Frame};
 use egui::{
-    emath, epaint::text::cursor::Cursor, vec2, Color32, DragAndDrop, FontId, Id, InnerResponse,
-    LayerId, Order, Rect, RichText, Sense, UiBuilder, Window,
+    emath, epaint::text::cursor::Cursor, vec2, Color32, DragAndDrop, FontId, Grid, Id,
+    InnerResponse, LayerId, Order, Rect, RichText, Sense, UiBuilder, Window,
 };
 use xmltree::{Element, XMLNode};
 
@@ -129,21 +129,15 @@ impl Mod {
     // returns the rect of the text and it's hover text for dragging
     fn render(&mut self, ui: &mut egui::Ui) -> (Rect, String) {
         ui.horizontal(|ui| {
-            let cursor_checkbox_start = ui.cursor().min.x;
-
-            match &mut self.kind {
+            ui.fixed_size_group(28.0, |ui| match &mut self.kind {
                 ModKind::Normal(normal_mod) => {
                     ui.checkbox(&mut normal_mod.enabled, "")
                         .on_hover_text("Enabled");
                 }
                 _ => {}
-            }
-            let cursor_checkbox_end = ui.cursor().min.x;
-            let checkbox_space_to_do = 28.0 + cursor_checkbox_start - cursor_checkbox_end;
-            ui.allocate_space(vec2(checkbox_space_to_do, 0.0));
+            });
 
-            let cursor_icon_start = ui.cursor().min.x;
-            match &self.source {
+            ui.fixed_size_group(30.0, |ui| match &self.source {
                 ModSource::Git(git_mod) => {
                     let remote_url = git_mod.remote.clone();
                     use egui::special_emojis::GIT;
@@ -176,36 +170,32 @@ impl Mod {
                         .width();
                 }
                 _ => {}
-            }
-            let cursor_icon_end = ui.cursor().min.x;
-            let icons_space_to_do = 30.0 + cursor_icon_start - cursor_icon_end;
-            ui.allocate_space(vec2(icons_space_to_do, 0.0));
-
-            let cursor_type_start = ui.cursor().min.x;
-            ui.horizontal(|ui| {
-                ui.label(
-                    match &self.kind {
-                        ModKind::Normal(_) => NORMAL,
-                        ModKind::Translation => TRANSLATION,
-                        ModKind::Gamemode => GAMEMODE,
-                    }
-                    .to_string(),
-                )
-                .on_hover_text(match &self.kind {
-                    ModKind::Normal(_) => "Normal mod",
-                    ModKind::Translation => "Translation mod",
-                    ModKind::Gamemode => "Gamemode mod",
-                });
-                if self.unsafe_api {
-                    ui.label(
-                        RichText::new(format!("{UNSAFE}")).color(Color32::from_rgb(255, 220, 40)),
-                    )
-                    .on_hover_text("Unsafe mod");
-                }
             });
-            let cursor_type_end = ui.cursor().min.x;
-            let types_space_to_do = 60.0 + cursor_type_start - cursor_type_end;
-            ui.allocate_space(vec2(types_space_to_do, 0.0));
+
+            ui.fixed_size_group(60.0, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(
+                        match &self.kind {
+                            ModKind::Normal(_) => NORMAL,
+                            ModKind::Translation => TRANSLATION,
+                            ModKind::Gamemode => GAMEMODE,
+                        }
+                        .to_string(),
+                    )
+                    .on_hover_text(match &self.kind {
+                        ModKind::Normal(_) => "Normal mod",
+                        ModKind::Translation => "Translation mod",
+                        ModKind::Gamemode => "Gamemode mod",
+                    });
+                    if self.unsafe_api {
+                        ui.label(
+                            RichText::new(format!("{UNSAFE}"))
+                                .color(Color32::from_rgb(255, 220, 40)),
+                        )
+                        .on_hover_text("Unsafe mod");
+                    }
+                });
+            });
 
             let hover = "(".to_owned()
                 + &self.id
@@ -504,6 +494,23 @@ impl<T> RetainEnumerateExt<T> for Vec<T> {
             i += 1;
             result
         });
+    }
+}
+
+trait UiSizedExt {
+    fn fixed_size_group<F>(&mut self, size: f32, f: F)
+    where
+        F: FnOnce(&mut Self);
+}
+impl UiSizedExt for egui::Ui {
+    fn fixed_size_group<F>(&mut self, size: f32, f: F)
+    where
+        F: FnOnce(&mut Self),
+    {
+        let cursor_start = self.cursor().min.x;
+        f(self);
+        let cursor_end = self.cursor().min.x;
+        self.allocate_space(vec2(size + cursor_start - cursor_end, 0.0));
     }
 }
 
