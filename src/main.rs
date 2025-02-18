@@ -128,19 +128,18 @@ impl Mod {
         ui.horizontal(|ui| {
             let mut done_checkbox = false;
 
-            let checkbox_size = ui.style().spacing.icon_width;
+            let cursor_checkbox_start = ui.cursor().min.x;
 
             match &mut self.kind {
                 ModKind::Normal(normal_mod) => {
                     ui.checkbox(&mut normal_mod.enabled, "")
                         .on_hover_text("Enabled");
-                    done_checkbox = true;
                 }
                 _ => {}
             }
-            if !done_checkbox {
-                ui.allocate_space(vec2(checkbox_size, 0.0));
-            }
+            let cursor_checkbox_end = ui.cursor().min.x;
+            let checkbox_space_to_do = 30.0 + cursor_checkbox_start - cursor_checkbox_end;
+            ui.allocate_space(vec2(checkbox_space_to_do, 0.0));
 
             let cursor_icon_start = ui.cursor().min.x;
             match &self.source {
