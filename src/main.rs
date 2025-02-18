@@ -139,7 +139,7 @@ impl Mod {
                 _ => {}
             }
             let cursor_checkbox_end = ui.cursor().min.x;
-            let checkbox_space_to_do = 30.0 + cursor_checkbox_start - cursor_checkbox_end;
+            let checkbox_space_to_do = 28.0 + cursor_checkbox_start - cursor_checkbox_end;
             ui.allocate_space(vec2(checkbox_space_to_do, 0.0));
 
             let cursor_icon_start = ui.cursor().min.x;
@@ -178,7 +178,7 @@ impl Mod {
                 _ => {}
             }
             let cursor_icon_end = ui.cursor().min.x;
-            let icons_space_to_do = 40.0 + cursor_icon_start - cursor_icon_end;
+            let icons_space_to_do = 30.0 + cursor_icon_start - cursor_icon_end;
             ui.allocate_space(vec2(icons_space_to_do, 0.0));
 
             let cursor_type_start = ui.cursor().min.x;
