@@ -585,6 +585,15 @@ impl eframe::App for App<'_, '_> {
                     {
                         let id = Id::new(("Modlist DND", i));
                         let payload = i;
+
+                        if i % 2 == 0 {
+                            let painter = ui.painter();
+
+                            let mut cursor = ui.cursor();
+                            cursor.max.y = cursor.min.y + self.row_rect.unwrap().height();
+                            painter.rect_filled(cursor, 0.0, ui.visuals().faint_bg_color);
+                        }
+
                         // largely pilfered from Ui::dnd_drag_source
                         if ui.ctx().is_being_dragged(id) {
                             DragAndDrop::set_payload(ui.ctx(), payload);
@@ -604,23 +613,7 @@ impl eframe::App for App<'_, '_> {
                                 );
                             }
                         } else {
-                            let scoped = ui
-                                .scope(|ui| {
-                                    if i % 2 == 0 {
-                                        let painter = ui.painter();
-
-                                        let mut cursor = ui.cursor();
-                                        cursor.max.y =
-                                            cursor.min.y + self.row_rect.unwrap().height();
-                                        painter.rect_filled(
-                                            cursor,
-                                            0.0,
-                                            ui.visuals().faint_bg_color,
-                                        );
-                                    }
-                                    nmod.render(ui)
-                                })
-                                .inner;
+                            let scoped = ui.scope(|ui| nmod.render(ui)).inner;
                             ui.interact(scoped.text_rect, id, Sense::drag())
                                 .on_hover_cursor(egui::CursorIcon::Grab)
                                 .on_hover_text(scoped.text_hover);
