@@ -1,9 +1,7 @@
 use std::{
     collections::HashMap,
-    f32::INFINITY,
     fs::{self, File},
     io::{BufReader, Read, Write},
-    mem::swap,
     path::Path,
 };
 
@@ -12,8 +10,8 @@ use anyhow::{anyhow, bail, Context};
 use conditional::Condition;
 use eframe::egui;
 use egui::{
-    emath, vec2, Color32, DragAndDrop, FontId, Id, InnerResponse, LayerId, Order, Rangef, Rect,
-    Response, RichText, Sense, Ui, UiBuilder, Window,
+    emath, vec2, Color32, DragAndDrop, FontId, Id, InnerResponse, LayerId, Order, Rangef,
+    Rect, RichText, Sense, Ui, UiBuilder, Window,
 };
 use xmltree::{Element, XMLNode};
 
