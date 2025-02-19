@@ -1,7 +1,9 @@
 use std::{
     collections::HashMap,
+    f32::INFINITY,
     fs::{self, File},
     io::{BufReader, Read, Write},
+    mem::swap,
     path::Path,
 };
 
@@ -10,8 +12,8 @@ use anyhow::{anyhow, bail, Context};
 use conditional::Condition;
 use eframe::egui;
 use egui::{
-    emath, vec2, Color32, DragAndDrop, FontId, Id, InnerResponse, LayerId, Order, Rect, Response,
-    RichText, Sense, Ui, UiBuilder, Window,
+    emath, vec2, Color32, DragAndDrop, FontId, Id, InnerResponse, LayerId, Order, Rangef, Rect,
+    Response, RichText, Sense, Ui, UiBuilder, Window,
 };
 use xmltree::{Element, XMLNode};
 
@@ -289,6 +291,7 @@ impl App<'_, '_> {
         &mut self,
         ui: &mut Ui,
         conditions: &[Condition],
+        do_dnd: bool,
     ) -> InnerResponse<Option<usize>> {
         ui.scope(|ui| {
             self.mods
@@ -332,8 +335,24 @@ impl App<'_, '_> {
                         ui.interact(inner.text_rect, id, Sense::drag())
                             .on_hover_cursor(egui::CursorIcon::Grab)
                             .on_hover_text(inner.text_hover);
-                        if scoped.response.contains_pointer() {
-                            Some(i)
+                        if do_dnd && scoped.response.contains_pointer() {
+                            if let Some(pointer) = ui.input(|i| i.pointer.interact_pos()) {
+                                let rect = scoped.response.rect;
+                                let stroke = egui::Stroke::new(1.0, Color32::WHITE);
+                                let x_range = Rangef {
+                                    min: rect.x_range().min,
+                                    max: 10000.0, // probably a better way to do this but idk how
+                                };
+                                if pointer.y > rect.center().y {
+                                    ui.painter().hline(x_range, rect.bottom(), stroke);
+                                    Some(i + 1)
+                                } else {
+                                    ui.painter().hline(x_range, rect.top(), stroke);
+                                    Some(i)
+                                }
+                            } else {
+                                None
+                            }
                         } else {
                             None
                         }
@@ -618,10 +637,55 @@ impl eframe::App for App<'_, '_> {
             egui::ScrollArea::vertical()
                 .auto_shrink(false)
                 .show(ui, |ui| {
-                    let inner_response = self.render_modlist(ui, conditions);
-                    let response = inner_response.response;
-                    if let Some(dnd_payload) = response.dnd_release_payload::<DNDPayload>() {
-                        dbg!(inner_response.inner, dnd_payload);
+                    let payload = egui::DragAndDrop::take_payload::<DNDPayload>(ui.ctx()); // taking the payload clears it
+                    let inner_response = self.render_modlist(ui, conditions, payload.is_some());
+
+                    if ui.ctx().input(|i| i.pointer.any_down()) {
+                        return;
+                    }
+
+                    if let Some(dnd_payload) = payload {
+                        let to_idx = inner_response.inner;
+                        let from_idx = dnd_payload.0;
+                        if let Some(to_idx) = to_idx {
+                            if from_idx == to_idx {
+                                return;
+                            }
+                            let filtered_mods = self
+                                .mods
+                                .iter()
+                                .enumerate()
+                                .filter(|(_, e)| e.matches(conditions))
+                                .collect::<Vec<_>>();
+                            let mut target_mod_idx = if to_idx == 0 {
+                                // if we drag it to the start always put it at the start
+                                0
+                            } else {
+                                filtered_mods
+                                    .iter()
+                                    .skip(to_idx)
+                                    .take(1)
+                                    .collect::<Vec<_>>()
+                                    .get(0)
+                                    .map(|e| e.0)
+                                    .unwrap_or(self.mods.len()) // if we drag it to the bottom when filtered we probably want it at the end of the modlist
+                            };
+
+                            let from_mod_idx = filtered_mods
+                                .get(from_idx)
+                                .expect("Dragged mod should exist")
+                                .0;
+
+                            let source = self.mods.remove(from_mod_idx);
+                            if target_mod_idx >= self.mods.len() {
+                                self.mods.push(source);
+                            } else {
+                                if target_mod_idx >= from_mod_idx {
+                                    target_mod_idx -= 1;
+                                }
+                                self.mods.insert(target_mod_idx, source);
+                            }
+                        }
                     }
                 });
         });
