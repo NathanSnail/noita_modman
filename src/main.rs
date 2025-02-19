@@ -10,8 +10,8 @@ use anyhow::{anyhow, bail, Context};
 use conditional::Condition;
 use eframe::egui;
 use egui::{
-    emath, vec2, Color32, DragAndDrop, FontId, Id,
-    LayerId, Order, Rect, RichText, Sense, UiBuilder, Window,
+    emath, vec2, Color32, DragAndDrop, FontId, Id, InnerResponse, LayerId, Order, Rect, Response,
+    RichText, Sense, Ui, UiBuilder, Window,
 };
 use xmltree::{Element, XMLNode};
 
@@ -61,6 +61,9 @@ fn main() -> anyhow::Result<()> {
     );
     result.map_err(|x| anyhow!(format!("{x:?}")))
 }
+
+#[derive(Copy, Clone, Debug)]
+struct DNDPayload(usize);
 
 #[derive(Copy, Clone, Debug)]
 enum GitHost {
@@ -280,6 +283,64 @@ impl App<'_, '_> {
             id: self.global_id,
         });
         self.global_id += 1;
+    }
+
+    fn render_modlist(
+        &mut self,
+        ui: &mut Ui,
+        conditions: &[Condition],
+    ) -> InnerResponse<Option<usize>> {
+        ui.scope(|ui| {
+            self.mods
+                .iter_mut()
+                .filter(|x| x.matches(conditions))
+                .enumerate()
+                .map(|(i, nmod)| {
+                    let id = Id::new(("Modlist DND", i));
+                    let payload = DNDPayload(i);
+
+                    if i % 2 == 0 {
+                        let painter = ui.painter();
+
+                        let mut cursor = ui.cursor();
+                        cursor.max.y = cursor.min.y + self.row_rect.unwrap().height();
+                        painter.rect_filled(cursor, 0.0, ui.visuals().faint_bg_color);
+                    }
+
+                    // largely pilfered from Ui::dnd_drag_source
+                    if ui.ctx().is_being_dragged(id) {
+                        DragAndDrop::set_payload(ui.ctx(), payload);
+
+                        let layer_id = LayerId::new(Order::Tooltip, id);
+                        let response = ui
+                            .scope_builder(UiBuilder::new().layer_id(layer_id), |ui| {
+                                nmod.render(ui)
+                            })
+                            .response;
+
+                        if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
+                            let delta = pointer_pos - response.rect.center();
+                            ui.ctx().transform_layer_shapes(
+                                layer_id,
+                                emath::TSTransform::from_translation(delta),
+                            );
+                        }
+                        None
+                    } else {
+                        let scoped = ui.scope(|ui| nmod.render(ui));
+                        let inner = scoped.inner;
+                        ui.interact(inner.text_rect, id, Sense::drag())
+                            .on_hover_cursor(egui::CursorIcon::Grab)
+                            .on_hover_text(inner.text_hover);
+                        if scoped.response.contains_pointer() {
+                            Some(i)
+                        } else {
+                            None
+                        }
+                    }
+                })
+                .fold(None, |acc, e| if acc.is_some() { acc } else { e })
+        })
     }
 
     /// call this to sort the loaded mods by a config, must have loaded some mods for this to do anything
@@ -557,47 +618,10 @@ impl eframe::App for App<'_, '_> {
             egui::ScrollArea::vertical()
                 .auto_shrink(false)
                 .show(ui, |ui| {
-                    for (i, nmod) in self
-                        .mods
-                        .iter_mut()
-                        .filter(|x| x.matches(&conditions))
-                        .enumerate()
-                    {
-                        let id = Id::new(("Modlist DND", i));
-                        let payload = i;
-
-                        if i % 2 == 0 {
-                            let painter = ui.painter();
-
-                            let mut cursor = ui.cursor();
-                            cursor.max.y = cursor.min.y + self.row_rect.unwrap().height();
-                            painter.rect_filled(cursor, 0.0, ui.visuals().faint_bg_color);
-                        }
-
-                        // largely pilfered from Ui::dnd_drag_source
-                        if ui.ctx().is_being_dragged(id) {
-                            DragAndDrop::set_payload(ui.ctx(), payload);
-
-                            let layer_id = LayerId::new(Order::Tooltip, id);
-                            let response = ui
-                                .scope_builder(UiBuilder::new().layer_id(layer_id), |ui| {
-                                    nmod.render(ui)
-                                })
-                                .response;
-
-                            if let Some(pointer_pos) = ui.ctx().pointer_interact_pos() {
-                                let delta = pointer_pos - response.rect.center();
-                                ui.ctx().transform_layer_shapes(
-                                    layer_id,
-                                    emath::TSTransform::from_translation(delta),
-                                );
-                            }
-                        } else {
-                            let scoped = ui.scope(|ui| nmod.render(ui)).inner;
-                            ui.interact(scoped.text_rect, id, Sense::drag())
-                                .on_hover_cursor(egui::CursorIcon::Grab)
-                                .on_hover_text(scoped.text_hover);
-                        }
+                    let inner_response = self.render_modlist(ui, conditions);
+                    let response = inner_response.response;
+                    if let Some(dnd_payload) = response.dnd_release_payload::<DNDPayload>() {
+                        dbg!(inner_response.inner, dnd_payload);
                     }
                 });
         });
