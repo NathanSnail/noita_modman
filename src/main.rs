@@ -8,10 +8,10 @@ use std::{
 mod conditional;
 use anyhow::{anyhow, bail, Context};
 use conditional::Condition;
-use eframe::{egui, Frame};
+use eframe::egui;
 use egui::{
-    emath, epaint::text::cursor::Cursor, vec2, Color32, DragAndDrop, FontId, Grid, Id,
-    InnerResponse, LayerId, Order, Pos2, Rect, RichText, Sense, UiBuilder, Window,
+    emath, vec2, Color32, DragAndDrop, FontId, Id,
+    LayerId, Order, Rect, RichText, Sense, UiBuilder, Window,
 };
 use xmltree::{Element, XMLNode};
 
@@ -490,31 +490,12 @@ impl App<'_, '_> {
     }
 }
 
-trait RetainEnumerateExt<T> {
-    fn retain_enumerate<F>(&mut self, f: F)
-    where
-        F: FnMut(&T, usize) -> bool;
-}
-
-impl<T> RetainEnumerateExt<T> for Vec<T> {
-    fn retain_enumerate<F>(&mut self, mut f: F)
-    where
-        F: FnMut(&T, usize) -> bool,
-    {
-        let mut i: usize = 0;
-        self.retain(|e| {
-            let result = f(e, i);
-            i += 1;
-            result
-        });
-    }
-}
-
 trait UiSizedExt {
     fn fixed_size_group<F>(&mut self, size: f32, f: F)
     where
         F: FnOnce(&mut Self);
 }
+
 impl UiSizedExt for egui::Ui {
     fn fixed_size_group<F>(&mut self, size: f32, f: F)
     where
@@ -535,7 +516,6 @@ impl eframe::App for App<'_, '_> {
             if self.row_rect == None {
                 if let Some(nmod) = self.mods.get_mut(0) {
                     self.row_rect = Some(nmod.render(ui).full_rect);
-                    dbg!(self.row_rect);
                     ctx.request_repaint();
                 }
             }
