@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use conditional::Condition;
 use egui::{Color32, Rect, RichText};
 pub mod conditional;
@@ -62,6 +64,7 @@ pub struct Mod {
     pub unsafe_api: bool,
     /// this is just needed for saving as we loaded it
     pub settings_fold_open: bool,
+    pub tags: Option<Vec<String>>,
 }
 
 #[derive(Clone, Debug)]
