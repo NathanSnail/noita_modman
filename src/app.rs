@@ -66,6 +66,59 @@ impl App<'_, '_> {
         self.global_id += 1;
     }
 
+    fn render_dnd_modlist(&mut self, ui: &mut Ui, conditions: &[Condition]) {
+        let payload = egui::DragAndDrop::take_payload::<DNDPayload>(ui.ctx()); // taking the payload clears it
+        let inner_response = self.render_modlist(ui, conditions, payload.is_some());
+
+        if ui.ctx().input(|i| i.pointer.any_down()) {
+            return;
+        }
+
+        if let Some(dnd_payload) = payload {
+            let to_idx = inner_response.inner;
+            let from_idx = dnd_payload.0;
+            if let Some(to_idx) = to_idx {
+                if from_idx == to_idx {
+                    return;
+                }
+                let filtered_mods = self
+                    .mods
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, e)| e.matches(conditions))
+                    .collect::<Vec<_>>();
+                let mut target_mod_idx = if to_idx == 0 {
+                    // if we drag it to the start always put it at the start
+                    0
+                } else {
+                    filtered_mods
+                        .iter()
+                        .skip(to_idx)
+                        .take(1)
+                        .collect::<Vec<_>>()
+                        .get(0)
+                        .map(|e| e.0)
+                        .unwrap_or(self.mods.len()) // if we drag it to the bottom when filtered we probably want it at the end of the modlist
+                };
+
+                let from_mod_idx = filtered_mods
+                    .get(from_idx)
+                    .expect("Dragged mod should exist")
+                    .0;
+
+                let source = self.mods.remove(from_mod_idx);
+                if target_mod_idx >= from_mod_idx {
+                    target_mod_idx -= 1;
+                }
+                if target_mod_idx >= self.mods.len() {
+                    self.mods.push(source);
+                } else {
+                    self.mods.insert(target_mod_idx, source);
+                }
+            }
+        }
+    }
+
     fn render_modlist(
         &mut self,
         ui: &mut Ui,
@@ -415,58 +468,7 @@ impl eframe::App for App<'_, '_> {
 
             egui::ScrollArea::vertical()
                 .auto_shrink(false)
-                .show(ui, |ui| {
-                    let payload = egui::DragAndDrop::take_payload::<DNDPayload>(ui.ctx()); // taking the payload clears it
-                    let inner_response = self.render_modlist(ui, conditions, payload.is_some());
-
-                    if ui.ctx().input(|i| i.pointer.any_down()) {
-                        return;
-                    }
-
-                    if let Some(dnd_payload) = payload {
-                        let to_idx = inner_response.inner;
-                        let from_idx = dnd_payload.0;
-                        if let Some(to_idx) = to_idx {
-                            if from_idx == to_idx {
-                                return;
-                            }
-                            let filtered_mods = self
-                                .mods
-                                .iter()
-                                .enumerate()
-                                .filter(|(_, e)| e.matches(conditions))
-                                .collect::<Vec<_>>();
-                            let mut target_mod_idx = if to_idx == 0 {
-                                // if we drag it to the start always put it at the start
-                                0
-                            } else {
-                                filtered_mods
-                                    .iter()
-                                    .skip(to_idx)
-                                    .take(1)
-                                    .collect::<Vec<_>>()
-                                    .get(0)
-                                    .map(|e| e.0)
-                                    .unwrap_or(self.mods.len()) // if we drag it to the bottom when filtered we probably want it at the end of the modlist
-                            };
-
-                            let from_mod_idx = filtered_mods
-                                .get(from_idx)
-                                .expect("Dragged mod should exist")
-                                .0;
-
-                            let source = self.mods.remove(from_mod_idx);
-                            if target_mod_idx >= from_mod_idx {
-                                target_mod_idx -= 1;
-                            }
-                            if target_mod_idx >= self.mods.len() {
-                                self.mods.push(source);
-                            } else {
-                                self.mods.insert(target_mod_idx, source);
-                            }
-                        }
-                    }
-                });
+                .show(ui, |ui| self.render_dnd_modlist(ui, conditions));
         });
     }
 }
