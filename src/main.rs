@@ -10,8 +10,8 @@ use anyhow::{anyhow, bail, Context};
 use conditional::Condition;
 use eframe::egui;
 use egui::{
-    emath, vec2, Color32, DragAndDrop, FontId, Id, InnerResponse, LayerId, Order, Rangef,
-    Rect, RichText, Sense, Ui, UiBuilder, Window,
+    emath, vec2, Color32, DragAndDrop, FontId, Id, InnerResponse, LayerId, Order, Rangef, Rect,
+    RichText, Sense, Ui, UiBuilder, Window,
 };
 use xmltree::{Element, XMLNode};
 
@@ -675,12 +675,12 @@ impl eframe::App for App<'_, '_> {
                                 .0;
 
                             let source = self.mods.remove(from_mod_idx);
+                            if target_mod_idx >= from_mod_idx {
+                                target_mod_idx -= 1;
+                            }
                             if target_mod_idx >= self.mods.len() {
                                 self.mods.push(source);
                             } else {
-                                if target_mod_idx >= from_mod_idx {
-                                    target_mod_idx -= 1;
-                                }
                                 self.mods.insert(target_mod_idx, source);
                             }
                         }
