@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::{self, File},
     io::{BufReader, Read, Write},
     path::Path,
@@ -315,8 +315,20 @@ impl App<'_, '_> {
             ModSource::Manual
         };
 
+        let mut tags = None;
+        if let Ok(workshop) = File::open(path.join("workshop.xml")) {
+            let reader = BufReader::new(workshop);
+            let xml = Element::parse(reader).context("Parsing workshop.xml")?;
+            let tags_str = get(&xml, "tags".to_owned(), "".to_owned());
+            if tags_str != "" {
+                // if it's default the mod doesn't support tags
+                tags = Some(tags_str.split(',').map(|e| e.trim().to_owned()).collect());
+            }
+        }
+
         let nmod = Mod {
             source,
+            tags,
             id,
             kind: if get(&tree, "is_translation".to_owned(), "0".to_owned()) == "1" {
                 ModKind::Translation

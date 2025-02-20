@@ -14,10 +14,11 @@ enum ConditionalVariant {
     Normal,
     Steam,
     Safe,
+    Tagged,
     Translation,
 }
 
-const CONDITIONS: [(&str, ConditionalVariant); 10] = [
+const CONDITIONS: [(&str, ConditionalVariant); 11] = [
     ("enabled", ConditionalVariant::Enabled),
     ("gamemode", ConditionalVariant::Gamemode),
     ("git", ConditionalVariant::Git),
@@ -27,6 +28,7 @@ const CONDITIONS: [(&str, ConditionalVariant); 10] = [
     ("normal", ConditionalVariant::Normal),
     ("steam", ConditionalVariant::Steam),
     ("safe", ConditionalVariant::Safe),
+    ("tagged", ConditionalVariant::Tagged),
     ("translation", ConditionalVariant::Translation),
 ];
 
@@ -82,18 +84,19 @@ impl ConditionalVariant {
             ConditionalVariant::Normal => Some(matches!(nmod.kind, ModKind::Normal(..))),
             ConditionalVariant::Steam => Some(matches!(nmod.source, ModSource::Steam(..))),
             ConditionalVariant::Safe => Some(!nmod.unsafe_api),
+            ConditionalVariant::Tagged => Some(nmod.tags.is_some()),
             ConditionalVariant::Translation => Some(matches!(nmod.kind, ModKind::Translation)),
         }
     }
 }
 
 #[derive(Copy, Clone, Debug)]
-struct Conditional {
+struct MetaCondition {
     conditional: ConditionalVariant,
     inverted: bool,
 }
 
-impl Conditional {
+impl MetaCondition {
     fn matches(&self, nmod: &Mod) -> bool {
         self.conditional
             .matches(nmod)
@@ -101,9 +104,9 @@ impl Conditional {
             .unwrap_or(true)
     }
 
-    fn new(src: &str) -> Option<Conditional> {
+    fn new(src: &str) -> Option<MetaCondition> {
         let inverted = src.chars().nth(0) == Some('!');
-        ConditionalVariant::new(&src[(inverted as usize)..]).map(|x| Conditional {
+        ConditionalVariant::new(&src[(inverted as usize)..]).map(|x| MetaCondition {
             conditional: x,
             inverted,
         })
@@ -111,9 +114,46 @@ impl Conditional {
 }
 
 #[derive(Clone, Debug)]
+struct TagCondition {
+    inverted: bool,
+    tag: String,
+}
+
+impl TagCondition {
+    fn new(src: &str) -> Option<TagCondition> {
+        let mut inverted = false;
+        let mut src = src;
+        if src.chars().nth(0) == Some('!') {
+            src = &src[1..];
+            inverted = true;
+        }
+        if src == "" {
+            return None;
+        }
+        Some(TagCondition {
+            inverted,
+            tag: src.to_owned(),
+        })
+    }
+
+    fn matches(&self, nmod: &Mod) -> bool {
+        // TODO: maybe we should have aliases? quality of life can't be searched due to spaces, but quality works well enough
+        if let Some(tags) = &nmod.tags {
+            tags.iter()
+                .map(|e| e.starts_with(&self.tag))
+                .fold(false, |acc, e| acc || e)
+                ^ self.inverted
+        } else {
+            true // NOTE: we have the #tagged option to allow for customising this
+        }
+    }
+}
+
+#[derive(Clone, Debug)]
 enum ConditionEnum {
-    Conditional(Conditional),
+    Meta(MetaCondition),
     Literal(String),
+    Tag(TagCondition),
 }
 
 #[derive(Clone, Debug)]
@@ -121,7 +161,8 @@ pub struct Condition(ConditionEnum);
 
 impl Condition {
     pub fn special_terms() -> String {
-        let s = "Special terms (use with # or #!):\n".to_owned();
+        let s =
+            "Use :tag or :!tag to search mod tags\nSpecial terms (use with # or #!):\n".to_owned();
         CONDITIONS.iter().fold(s, |acc, e| acc + "\n" + e.0)
     }
 
@@ -129,8 +170,11 @@ impl Condition {
         match src.chars().nth(0) {
             Some(c) => {
                 if c == '#' {
-                    Conditional::new(&src[1..].to_lowercase())
-                        .map(|x| Condition(ConditionEnum::Conditional(x)))
+                    MetaCondition::new(&src[1..].to_lowercase())
+                        .map(|x| Condition(ConditionEnum::Meta(x)))
+                } else if c == ':' {
+                    TagCondition::new(&src[1..].to_lowercase())
+                        .map(|x| Condition(ConditionEnum::Tag(x)))
                 } else {
                     Some(Condition(ConditionEnum::Literal(src.to_lowercase())))
                 }
@@ -141,10 +185,11 @@ impl Condition {
 
     pub fn matches(&self, nmod: &Mod) -> bool {
         match &self.0 {
-            ConditionEnum::Conditional(conditional) => conditional.matches(nmod),
+            ConditionEnum::Meta(meta) => meta.matches(nmod),
             ConditionEnum::Literal(s) => {
                 nmod.name.to_lowercase().contains(s) || nmod.id.to_lowercase().contains(s)
             }
+            ConditionEnum::Tag(tag) => tag.matches(nmod),
         }
     }
 }
