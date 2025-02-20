@@ -1,7 +1,7 @@
-use crate::GitHost;
+use crate::r#mod::GitHost;
+use crate::r#mod::ModKind;
+use crate::r#mod::ModSource;
 use crate::Mod;
-use crate::ModKind;
-use crate::ModSource;
 
 #[derive(Copy, Clone, Debug)]
 enum ConditionalVariant {
