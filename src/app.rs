@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     fs::{self, File},
     io::{BufReader, Read, Write},
     path::Path,
@@ -10,11 +10,14 @@ use egui::{
     emath, vec2, Color32, DragAndDrop, Id, InnerResponse, LayerId, Order, Rangef, Rect, Sense, Ui,
     UiBuilder, Window,
 };
+use modpack::ModSettings;
 use xmltree::{Element, XMLNode};
 
 use crate::r#mod::{
     conditional::Condition, GitHost, GitMod, Mod, ModKind, ModSource, NormalMod, SteamMod,
 };
+
+mod modpack;
 
 #[derive(Copy, Clone, Debug)]
 struct DNDPayload(usize);
@@ -46,6 +49,7 @@ pub struct App<'a, 'b> {
     popups: Vec<Popup<'b>>,
     global_id: usize,
     row_rect: Option<Rect>,
+    mod_settings: ModSettings,
 }
 
 #[derive(Clone, Debug)]
@@ -195,9 +199,9 @@ impl App<'_, '_> {
     }
 
     /// call this to sort the loaded mods by a config, must have loaded some mods for this to do anything
-    pub fn sort_mods(&mut self, mod_config: &Vec<ModConfigItem>) -> anyhow::Result<()> {
+    fn sort_mods(mods: &[Mod], mod_config: &Vec<ModConfigItem>) -> anyhow::Result<Vec<Mod>> {
         let mut mod_map = HashMap::new();
-        for nmod in self.mods.iter() {
+        for nmod in mods.iter() {
             if mod_map.insert(nmod.id.clone(), nmod).is_some() {
                 bail!(
                     "Duplicate mod id {} in loaded mods, mod list is broken",
@@ -222,8 +226,7 @@ impl App<'_, '_> {
             }
         }
 
-        self.mods = new_mods;
-        Ok(())
+        Ok(new_mods)
     }
 
     fn parse_config_item(node: &XMLNode) -> anyhow::Result<ModConfigItem> {
@@ -242,7 +245,7 @@ impl App<'_, '_> {
         })
     }
 
-    pub fn parse_config<R>(src: R) -> anyhow::Result<Vec<ModConfigItem>>
+    fn parse_config<R>(src: R) -> anyhow::Result<Vec<ModConfigItem>>
     where
         R: Read,
     {
@@ -349,7 +352,8 @@ impl App<'_, '_> {
         Ok(Some(nmod))
     }
 
-    pub fn load_dir(&mut self, dir: &Path, is_workshop: bool) -> anyhow::Result<()> {
+    fn load_dir(dir: &Path, is_workshop: bool) -> anyhow::Result<Vec<Mod>> {
+        let mut mods = Vec::new();
         fs::read_dir(dir)
             .context("Reading mods directory")?
             .try_for_each::<_, anyhow::Result<()>>(|item| {
@@ -367,23 +371,65 @@ impl App<'_, '_> {
                 })?;
                 {
                     if let Some(x) = nmod {
-                        self.mods.push(x);
+                        mods.push(x);
                     }
                     Ok(())
                 }
             })?;
-        Ok(())
+        Ok(mods)
     }
 
-    pub fn new<'a, 'b>(mod_config: &'a Path) -> App<'a, 'b> {
-        return App {
+    pub fn new<'a, 'b>(
+        mod_config: &'a Path,
+        workshop_dir: Option<&Path>,
+        mods_dir: Option<&Path>,
+        mod_settings: &Path,
+    ) -> anyhow::Result<App<'a, 'b>> {
+        let mut mods = Vec::new();
+        if let Some(dir) = mods_dir {
+            mods.extend(
+                Self::load_dir(dir, false)
+                    .context(format!("Loading mods dir {}", dir.display()))?,
+            );
+        }
+        if let Some(dir) = workshop_dir {
+            mods.extend(
+                Self::load_dir(dir, true)
+                    .context(format!("Loading workshop mods dir {}", dir.display()))?,
+            );
+        }
+
+        let config = Self::parse_config(BufReader::new(
+            File::open(mod_config)
+                .context(format!("Opening mod config {}", mod_config.display()))?,
+        ))
+        .context(format!("Parsing mod config {}", mod_config.display()))?;
+        let mods = Self::sort_mods(&mods, &config).context("Sorting mods")?;
+
+        let file = BufReader::new(
+            File::open(mod_settings)
+                .context(format!("Opening mod settings {}", mod_settings.display()))?,
+        );
+        let mod_settings = ModSettings::load(
+            file,
+            fs::metadata(mod_settings)
+                .context(format!(
+                    "Getting metadata for mod settings {}",
+                    mod_settings.display()
+                ))?
+                .len() as usize,
+        )
+        .context(format!("Loading mod settings {}", mod_settings.display()))?;
+
+        Ok(App {
             mod_config,
             search: "".to_owned(),
-            mods: Vec::new(),
+            mods,
             popups: Vec::new(),
             global_id: 0,
             row_rect: None,
-        };
+            mod_settings,
+        })
     }
 
     fn save_mods(&self) -> anyhow::Result<()> {

@@ -1,4 +1,4 @@
-use std::{fs::File, io::BufReader, path::Path};
+use std::path::Path;
 
 mod app;
 mod r#mod;
@@ -10,23 +10,18 @@ use r#mod::Mod;
 
 fn main() -> anyhow::Result<()> {
     let mod_config = Path::new("/home/nathan/.local/share/Steam/steamapps/compatdata/881100/pfx/drive_c/users/steamuser/AppData/LocalLow/Nolla_Games_Noita/save00/mod_config.xml");
-    let mut app = App::new(&mod_config);
+    let mod_settings = Path::new("/home/nathan/.local/share/Steam/steamapps/compatdata/881100/pfx/drive_c/users/steamuser/AppData/LocalLow/Nolla_Games_Noita/save00/mod_settings.bin");
+    let mods_dir = Path::new("/home/nathan/.local/share/Steam/steamapps/common/Noita/mods");
+    let workshop_dir =
+        Path::new("/home/nathan/.local/share/Steam/steamapps/workshop/content/881100");
 
-    let mod_config = App::parse_config(BufReader::new(
-        File::open(&mod_config).context("Opening mod config")?,
-    ))
-    .context("Parsing mod config")?;
-    app.load_dir(
-        Path::new("/home/nathan/.local/share/Steam/steamapps/common/Noita/mods"),
-        false,
+    let app = App::new(
+        &mod_config,
+        Some(workshop_dir),
+        Some(mods_dir),
+        mod_settings,
     )
-    .context("Loading main mods folder")?;
-    app.load_dir(
-        Path::new("/home/nathan/.local/share/Steam/steamapps/workshop/content/881100"),
-        true,
-    )
-    .context("Loading wokshop mods folder")?;
-    app.sort_mods(&mod_config).context("Sorting mods list")?;
+    .context("Creating app")?;
 
     let options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
