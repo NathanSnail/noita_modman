@@ -1,5 +1,3 @@
-use std::collections::HashSet;
-
 use conditional::Condition;
 use egui::{Color32, Rect, RichText};
 pub mod conditional;
