@@ -420,6 +420,7 @@ impl App<'_, '_> {
                 .len() as usize,
         )
         .context(format!("Loading mod settings {}", mod_settings.display()))?;
+        dbg!(&mod_settings);
 
         Ok(App {
             mod_config,
