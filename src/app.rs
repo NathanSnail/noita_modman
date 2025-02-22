@@ -472,7 +472,7 @@ impl App<'_, '_> {
                 .len() as usize,
         )
         .context(format!("Loading mod settings {}", mod_settings.display()))?;
-        mod_settings.save(BufWriter::new(File::create("./saved_settings")?))?;
+        // mod_settings.save(BufWriter::new(File::create("./saved_settings")?))?;
 
         Ok(App {
             mod_config,
@@ -481,7 +481,7 @@ impl App<'_, '_> {
             popups: Vec::new(),
             global_id: 0,
             row_rect: None,
-            modpacks,
+            modpacks: Vec::new(),
             mod_settings,
         })
     }
