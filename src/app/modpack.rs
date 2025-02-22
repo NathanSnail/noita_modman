@@ -242,7 +242,7 @@ impl ModPack {
                 settings: ModSettings(settings),
             })
         })()
-        .context(format!("for pack {err_name}"))
+        .context(format!("Loading pack {err_name}"))
     }
 
     pub fn load<R>(mut reader: R) -> anyhow::Result<ModPack>
@@ -256,6 +256,51 @@ impl ModPack {
             0 => Self::load_v0(reader),
             1.. => bail!("Attempted to load future modpack schema (v{version})"),
         }
+    }
+
+    pub fn save<W>(&self, mut writer: W) -> anyhow::Result<()>
+    where
+        W: Write,
+    {
+        (|| {
+            writer
+                .write_le::<usize>(0)
+                .context("Writing modpack schema version")?;
+            writer
+                .write_le::<usize>(self.name.len())
+                .context("Writing modpack name length")?;
+            writer
+                .write_all(self.name.as_bytes())
+                .context("Writing modpack name")?;
+            writer
+                .write_le::<usize>(self.mods.len())
+                .context("Writing modpack number of mods")?;
+
+            for nmod in self.mods.iter() {
+                writer
+                    .write_le::<usize>(nmod.len())
+                    .context("Writing mod name length")?;
+                writer
+                    .write_all(nmod.as_bytes())
+                    .context("Writing mod name")?;
+            }
+
+            writer
+                .write_le::<usize>(self.settings.0.len())
+                .context("Writing modpack number of settings")?;
+
+            for (key, values) in &self.settings.0 {
+                ModSetting {
+                    key: key.clone(),
+                    values: values.clone(),
+                }
+                .save(&mut writer)
+                .context(format!("Saving setting {key}"))?;
+            }
+
+            Ok::<_, Error>(())
+        })()
+        .context(format!("Saving pack {}", self.name))
     }
 
     pub fn render(&self, ui: &mut Ui) {
