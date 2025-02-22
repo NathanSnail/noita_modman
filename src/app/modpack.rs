@@ -378,10 +378,10 @@ impl ModSettings {
         let mut settings = HashMap::new();
         let mut decompressed =
             ByteVec(decompress_file(reader, file_size).context("Decompressing file")?);
-        File::create("./mod_settings")
-            .unwrap()
-            .write_all(&decompressed.0)
-            .unwrap();
+        // File::create("./mod_settings")
+        //     .unwrap()
+        //     .write_all(&decompressed.0)
+        //     .unwrap();
         let expected_num_entries = decompressed
             .read_be::<u64>()
             .context("Reading expected entries")?;
