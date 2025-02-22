@@ -10,7 +10,7 @@ use egui::{
     emath, vec2, Color32, DragAndDrop, Id, InnerResponse, LayerId, Order, Rangef, Rect, Sense, Ui,
     UiBuilder, Window,
 };
-use modpack::ModSettings;
+use modpack::{ModPack, ModSettings};
 use xmltree::{Element, XMLNode};
 
 use crate::r#mod::{
@@ -46,6 +46,7 @@ pub struct App<'a, 'b> {
     search: String,
     mod_config: &'a Path,
     mods: Vec<Mod>,
+    modpacks: Vec<ModPack>,
     popups: Vec<Popup<'b>>,
     global_id: usize,
     row_rect: Option<Rect>,
@@ -60,6 +61,57 @@ pub struct ModConfigItem {
 }
 
 impl App<'_, '_> {
+    fn render_modlist_panel(&mut self, ui: &mut Ui) {
+        for modpack in self.modpacks.iter() {}
+    }
+
+    fn render_mods_panel(&mut self, ui: &mut Ui) {
+        if self.row_rect == None {
+            if let Some(nmod) = self.mods.get_mut(0) {
+                self.row_rect = Some(nmod.render(ui).full_rect);
+                ui.ctx().request_repaint();
+            }
+        }
+
+        ui.heading("Mod Manager");
+        if ui
+            .button("Save")
+            .on_hover_text("Save mod config for use in game (requires restarting Noita)")
+            .clicked()
+        {
+            if let Err(error) = self.save_mods().context("While saving mod config") {
+                self.create_error(error);
+            }
+        }
+        let cur_search = self.search.clone();
+        let conditions_err: Vec<_> = cur_search
+            .split(" ")
+            .map(|x| (x, Condition::new(x)))
+            .filter(|x| x.0 != "")
+            .collect();
+        let broken_terms: &Vec<_> = &conditions_err
+            .iter()
+            .filter(|x| x.1.is_none())
+            .map(|x| x.0)
+            .collect();
+        let conditions: &Vec<_> = &conditions_err.iter().filter_map(|x| x.1.clone()).collect();
+        ui.horizontal(|ui| {
+            ui.label("Search");
+            ui.text_edit_singleline(&mut self.search)
+                .on_hover_text(Condition::special_terms());
+            if !broken_terms.is_empty() {
+                ui.label("Broken search terms: ");
+                broken_terms.iter().for_each(|x| {
+                    ui.label(x.to_string());
+                });
+            }
+        });
+
+        egui::ScrollArea::vertical()
+            .auto_shrink(false)
+            .show(ui, |ui| self.render_dnd_modlist(ui, conditions));
+    }
+
     fn create_error(&mut self, error: anyhow::Error) {
         println!("Error: {error:?}");
         self.popups.push(Popup {
@@ -429,6 +481,7 @@ impl App<'_, '_> {
             popups: Vec::new(),
             global_id: 0,
             row_rect: None,
+            modpacks,
             mod_settings,
         })
     }
@@ -487,51 +540,6 @@ impl eframe::App for App<'_, '_> {
             ui.label("hi");
         });
 
-        egui::CentralPanel::default().show(ctx, |ui| {
-            if self.row_rect == None {
-                if let Some(nmod) = self.mods.get_mut(0) {
-                    self.row_rect = Some(nmod.render(ui).full_rect);
-                    ctx.request_repaint();
-                }
-            }
-
-            ui.heading("Mod Manager");
-            if ui
-                .button("Save")
-                .on_hover_text("Save mod config for use in game (requires restarting Noita)")
-                .clicked()
-            {
-                if let Err(error) = self.save_mods().context("While saving mod config") {
-                    self.create_error(error);
-                }
-            }
-            let cur_search = self.search.clone();
-            let conditions_err: Vec<_> = cur_search
-                .split(" ")
-                .map(|x| (x, Condition::new(x)))
-                .filter(|x| x.0 != "")
-                .collect();
-            let broken_terms: &Vec<_> = &conditions_err
-                .iter()
-                .filter(|x| x.1.is_none())
-                .map(|x| x.0)
-                .collect();
-            let conditions: &Vec<_> = &conditions_err.iter().filter_map(|x| x.1.clone()).collect();
-            ui.horizontal(|ui| {
-                ui.label("Search");
-                ui.text_edit_singleline(&mut self.search)
-                    .on_hover_text(Condition::special_terms());
-                if !broken_terms.is_empty() {
-                    ui.label("Broken search terms: ");
-                    broken_terms.iter().for_each(|x| {
-                        ui.label(x.to_string());
-                    });
-                }
-            });
-
-            egui::ScrollArea::vertical()
-                .auto_shrink(false)
-                .show(ui, |ui| self.render_dnd_modlist(ui, conditions));
-        });
+        egui::CentralPanel::default().show(ctx, |ui| self.render_mods_panel(ui));
     }
 }
