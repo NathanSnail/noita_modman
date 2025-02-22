@@ -483,6 +483,10 @@ impl eframe::App for App<'_, '_> {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.popups.retain(|popup| popup.show(&ctx));
 
+        egui::SidePanel::right(Id::new("right panel")).show(ctx, |ui| {
+            ui.label("hi");
+        });
+
         egui::CentralPanel::default().show(ctx, |ui| {
             if self.row_rect == None {
                 if let Some(nmod) = self.mods.get_mut(0) {
