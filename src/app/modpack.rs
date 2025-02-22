@@ -3,24 +3,37 @@ use std::{
     collections::HashMap,
     fs::File,
     io::{Read, Write},
+    path::Path,
 };
 
-use anyhow::{anyhow, bail, Context};
+use anyhow::{anyhow, bail, Context, Error};
 use bytemuck::{AnyBitPattern, Pod};
+use egui::Ui;
 use fastlz;
 
+use crate::{ext::ByteReaderExt, ext::ByteWriterExt, r#mod::Mod};
+
 #[derive(Clone, Debug)]
-enum ModSetting {
+enum ModSettingValue {
+    /// id 0
     None,
+    /// id 1
     Bool(bool),
+    /// id 2
     Number(f64),
+    /// id 3
     String(String),
 }
 
 #[derive(Clone, Debug)]
 struct ModSettingPair {
-    current: ModSetting,
-    next: ModSetting,
+    current: ModSettingValue,
+    next: ModSettingValue,
+}
+
+struct ModSetting {
+    key: String,
+    values: ModSettingPair,
 }
 
 #[derive(Clone, Debug)]
@@ -28,17 +41,9 @@ pub struct ModSettings(HashMap<String, ModSettingPair>);
 
 #[derive(Clone, Debug)]
 pub struct ModPack {
+    name: String,
     mods: Vec<String>,
     settings: ModSettings,
-}
-
-trait ByteReaderExt {
-    fn read_le<T>(&mut self) -> anyhow::Result<T>
-    where
-        T: AnyBitPattern;
-    fn read_be<T>(&mut self) -> anyhow::Result<T>
-    where
-        T: AnyBitPattern;
 }
 
 #[derive(Clone, Debug)]
@@ -50,34 +55,6 @@ impl Read for ByteVec {
         buf[..len].copy_from_slice(&self.0[..len]);
         self.0.drain(0..len);
         Ok(len)
-    }
-}
-
-impl<R> ByteReaderExt for R
-where
-    R: Read,
-{
-    fn read_le<T>(&mut self) -> anyhow::Result<T>
-    where
-        T: AnyBitPattern,
-    {
-        let mut buffer = vec![0; size_of::<T>()];
-        self.read_exact(&mut buffer)
-            .context(format!("Reading {} bytes into buffer", buffer.capacity()))?;
-        Ok(*(bytemuck::try_from_bytes::<T>(&buffer)
-            .map_err(|e| anyhow!("Failed to try from bytes {e}"))?))
-    }
-
-    fn read_be<T>(&mut self) -> anyhow::Result<T>
-    where
-        T: AnyBitPattern,
-    {
-        let mut buffer = vec![0; size_of::<T>()];
-        self.read_exact(&mut buffer)
-            .context(format!("Reading {} bytes into buffer", buffer.capacity()))?;
-        buffer.reverse();
-        Ok(*(bytemuck::try_from_bytes::<T>(&buffer)
-            .map_err(|e| anyhow!("Failed to try from bytes {e}"))?))
     }
 }
 
@@ -115,36 +92,190 @@ where
     Ok(output)
 }
 
-impl ModSetting {
-    pub fn load<R>(mut reader: R, setting_type: u32) -> anyhow::Result<ModSetting>
+impl ModSettingValue {
+    fn load<R>(mut reader: R, setting_type: u32) -> anyhow::Result<ModSettingValue>
     where
         R: Read,
     {
         match setting_type {
-            0 => Ok(ModSetting::None),
+            0 => Ok(ModSettingValue::None),
             1 => match reader.read_be::<u32>().context("Reading bool value")? {
-                0 => Ok(ModSetting::Bool(false)),
-                1 => Ok(ModSetting::Bool(true)),
-                2.. => Err(anyhow!("Illegaal bool value")),
+                0 => Ok(ModSettingValue::Bool(false)),
+                1 => Ok(ModSettingValue::Bool(true)),
+                2.. => Err(anyhow!("Illegal bool value")),
             },
-            2 => Ok(ModSetting::Number(
+            2 => Ok(ModSettingValue::Number(
                 reader.read_be().context("Reading number value")?,
             )),
             3 => {
                 let size = reader.read_be::<u32>().context("Reading string length")?;
                 let mut buf = vec![0; size as usize];
                 reader.read_exact(&mut buf).context("Reading string data")?;
-                Ok(ModSetting::String(String::from_utf8(buf.clone()).context(
-                    // TODO: another wasteful clone
-                    format!("Converting string data {:?} to utf8", buf),
-                )?))
+                Ok(ModSettingValue::String(
+                    String::from_utf8(buf.clone()).context(
+                        // TODO: another wasteful clone
+                        format!("Converting string data {:?} to utf8", buf),
+                    )?,
+                ))
             }
             4.. => Err(anyhow!("Illegal setting type {setting_type}")),
         }
     }
+
+    fn type_int(&self) -> u32 {
+        match self {
+            ModSettingValue::None => 0,
+            ModSettingValue::Bool(_) => 1,
+            ModSettingValue::Number(_) => 2,
+            ModSettingValue::String(_) => 3,
+        }
+    }
+
+    /// Note that you need to save the type yourself via [`type_int`], as it is seperated from the value
+    fn save<W>(&self, mut writer: W) -> anyhow::Result<()>
+    where
+        W: Write,
+    {
+        match self {
+            ModSettingValue::None => Ok(()),
+            ModSettingValue::Bool(v) => writer.write_be::<u32>(if *v {1} else {0}).context(format!("Writing bool value {v}"))
+            ModSettingValue::Number(v) => writer.write_be::<f64>(v).context(format!("Writing number value {v}")),
+            ModSettingValue::String(v) => {
+                let len = v.len();
+                (|| {
+                    writer.write_be::<u32>(len as u32).context(format!("Writing string length {len}"))?;
+                    let key_buf = v.as_bytes();
+                    writer.write_all(key_buf).context("Writing string value")?;
+                    Ok(())
+                })().context(format!("Writing string {v}"))
+            }
+        }
+    }
 }
 
-impl ModPack {}
+impl ModPack {
+    fn load_v0<R>(mut reader: R) -> anyhow::Result<ModPack>
+    where
+        R: Read,
+    {
+        let name_len = reader
+            .read_le::<usize>()
+            .context("Reading modpack name length")?;
+        let mut name_buf = vec![0; name_len];
+        reader
+            .read_exact(&mut name_buf)
+            .context("Reading modpack name")?;
+        let name = String::from_utf8(name_buf).context("Converting modpack name to utf8")?;
+        let err_name = name.clone();
+        (|| {
+            let num_mods = reader
+                .read_le::<usize>()
+                .context(format!("Reading modpack number of mods"))?;
+
+            let mut mods = Vec::with_capacity(num_mods);
+
+            for _ in 0..num_mods {
+                let mod_name_len = reader
+                    .read_le::<usize>()
+                    .context(format!("Reading mod name length"))?;
+                let mut mod_name_buf = vec![0; mod_name_len];
+                reader
+                    .read_exact(&mut mod_name_buf)
+                    .context("Reading mod name")?;
+                let mod_name =
+                    String::from_utf8(mod_name_buf).context("Converting mod name to utf8")?;
+                mods.push(mod_name);
+            }
+
+            let num_settings = reader
+                .read_le::<usize>()
+                .context("Reading modpack number of settings")?;
+
+            let mut settings = HashMap::new();
+            for i in 0..num_settings {
+                let setting = ModSetting::load(&mut reader)
+                    .context(format!("Loading modpack setting {i}"))?;
+                settings.insert(setting.key, setting.values);
+            }
+
+            Ok::<ModPack, anyhow::Error>(ModPack {
+                name,
+                mods,
+                settings: ModSettings(settings),
+            })
+        })()
+        .context(format!("for pack {err_name}"))
+    }
+
+    pub fn load<R>(mut reader: R) -> anyhow::Result<ModPack>
+    where
+        R: Read,
+    {
+        let version = reader
+            .read_le::<usize>()
+            .context("Reading modpack schema version")?;
+        match version {
+            0 => Self::load_v0(reader),
+            1.. => bail!("Attempted to load future modpack schema (v{version})"),
+        }
+    }
+
+    pub fn render(&self, ui: &mut Ui) {
+        for nmod in self.mods.iter() {
+            ui.label(nmod);
+        }
+    }
+}
+
+impl ModSetting {
+    pub fn load<R>(mut reader: R) -> anyhow::Result<ModSetting>
+    where
+        R: Read,
+    {
+        let key_len = reader.read_be::<u32>().context("Reading key length")?;
+        let mut buf = vec![0; key_len as usize];
+        reader.read_exact(&mut buf).context("Reading key")?;
+        let key = String::from_utf8(buf.clone()) // TODO: remove wasteful clone!
+            .context(format!("Converting key {:?} to utf8", buf))?;
+        let setting_current_type = reader
+            .read_be::<u32>()
+            .context(format!("Reading setting {key} current type"))?;
+        let setting_next_type = reader
+            .read_be::<u32>()
+            .context(format!("Reading setting {key} next type"))?;
+        let setting_current = ModSettingValue::load(&mut reader, setting_current_type)
+            .context(format!("Reading setting {key} current value"))?;
+        let setting_next = ModSettingValue::load(&mut reader, setting_next_type)
+            .context(format!("Reading setting {key} next value"))?;
+        Ok(ModSetting {
+            key,
+            values: ModSettingPair {
+                current: setting_current,
+                next: setting_next,
+            },
+        })
+    }
+
+    pub fn save<W>(&self, mut writer: W) -> anyhow::Result<()>
+    where
+        W: Write,
+    {
+        writer
+            .write_be::<u32>(self.key.len() as u32)
+            .context("Writing key length")?;
+        let key_buf = self.key.as_bytes();
+        writer.write_all(key_buf).context("Writing key")?;
+        writer.write_be::<u32>(self.values.current.type_int());
+        writer.write_be::<u32>(self.values.next.type_int());
+        (|| {
+            self.values.current.save(&mut writer).context("Saving current value")?;
+            self.values.current.save(&mut writer).context("Saving next value")?;
+            Ok::<_, Error>(())
+        })()
+        .context(format!("Saving setting with key {}", self.key))
+    }
+}
+
 impl ModSettings {
     // basically a port of dexters https://github.com/dextercd/NoitaSettings/blob/main/settings_main.cpp
     pub fn load<R>(reader: R, file_size: usize) -> anyhow::Result<ModSettings>
@@ -163,35 +294,17 @@ impl ModSettings {
             .context("Reading expected entries")?;
         let mut num_entries = 0;
         while decompressed.0.len() != 0 {
+            let setting = ModSetting::load(&mut decompressed)
+                .context(format!("Loading setting number {num_entries}"))?;
             num_entries += 1;
-            let key_len = decompressed
-                .read_be::<u32>()
-                .context("Reading key length")?;
-            let mut buf = vec![0; key_len as usize];
-            decompressed.read_exact(&mut buf).context("Reading key")?;
-            let key = String::from_utf8(buf.clone()) // TODO: remove wasteful clone!
-                .context(format!("Converting key {:?} to utf8", buf))?;
-            let setting_current_type = decompressed
-                .read_be::<u32>()
-                .context(format!("Reading setting {key} current type"))?;
-            let setting_next_type = decompressed
-                .read_be::<u32>()
-                .context(format!("Reading setting {key} next type"))?;
-            let setting_current = ModSetting::load(&mut decompressed, setting_current_type)
-                .context(format!("Reading setting {key} current value"))?;
-            let setting_next = ModSetting::load(&mut decompressed, setting_next_type)
-                .context(format!("Reading setting {key} next value"))?;
-            settings.insert(
-                key,
-                ModSettingPair {
-                    current: setting_current,
-                    next: setting_next,
-                },
-            );
+            settings.insert(setting.key, setting.values);
         }
+
         if num_entries != expected_num_entries {
             bail!("Expected {expected_num_entries} but there were {num_entries}");
         }
         Ok(ModSettings(settings))
     }
+
+    pub fn save<W>(writer: W) -> anyhow::Result<()> {}
 }
