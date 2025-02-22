@@ -31,6 +31,7 @@ struct ModSettingPair {
     next: ModSettingValue,
 }
 
+#[derive(Clone, Debug)]
 struct ModSetting {
     key: String,
     values: ModSettingPair,
@@ -314,7 +315,7 @@ impl ModSetting {
                 .save(&mut writer)
                 .context("Writing current value")?;
             self.values
-                .current
+                .next
                 .save(&mut writer)
                 .context("Writing next value")?;
             Ok::<_, Error>(())
@@ -343,6 +344,7 @@ impl ModSettings {
         while decompressed.0.len() != 0 {
             let setting = ModSetting::load(&mut decompressed)
                 .context(format!("Loading setting number {num_entries}"))?;
+            dbg!(&setting);
             num_entries += 1;
             settings.insert(setting.key, setting.values);
         }
@@ -358,12 +360,14 @@ impl ModSettings {
         W: Write,
     {
         let mut buf = ByteVec(Vec::new());
+        buf.write_be::<u64>(self.0.len() as u64)
+            .context("Writing number of settings")?;
         for (key, values) in self.0.iter() {
-            ModSetting {
+            let setting = ModSetting {
                 key: key.clone(),
                 values: values.clone(),
-            }
-            .save(&mut buf)?; // TODO: remove clones
+            };
+            setting.save(&mut buf)?; // TODO: remove clones
         }
         compress_file(writer, &buf.0).context("Compressing to file")
     }
