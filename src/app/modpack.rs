@@ -58,6 +58,17 @@ impl Read for ByteVec {
     }
 }
 
+impl Write for ByteVec {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.extend(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
 fn decompress_file<R>(mut reader: R, file_size: usize) -> anyhow::Result<Vec<u8>>
 where
     R: Read,
@@ -90,6 +101,25 @@ where
     fastlz::decompress(&compressed, &mut output)
         .map_err(|_| anyhow!("FastLZ failed to decompress"))?;
     Ok(output)
+}
+
+fn compress_file<W>(mut writer: W, buf: &[u8]) -> anyhow::Result<()>
+where
+    W: Write,
+{
+    let mut output = vec![0; buf.len() * 2]; // according to dexter code fastlz isn't worse than this
+    let output_slice =
+        fastlz::compress(&(buf), &mut output).map_err(|_| anyhow!("FastLZ failed to compress"))?;
+    writer
+        .write_le::<u32>(output_slice.len() as u32)
+        .context("Writing output length")?;
+    writer
+        .write_le::<u32>(buf.len() as u32)
+        .context("Writing input length")?;
+    writer
+        .write_all(output_slice)
+        .context("Writing compressed buffer")?;
+    Ok(())
 }
 
 impl ModSettingValue {
@@ -138,16 +168,23 @@ impl ModSettingValue {
     {
         match self {
             ModSettingValue::None => Ok(()),
-            ModSettingValue::Bool(v) => writer.write_be::<u32>(if *v {1} else {0}).context(format!("Writing bool value {v}"))
-            ModSettingValue::Number(v) => writer.write_be::<f64>(v).context(format!("Writing number value {v}")),
+            ModSettingValue::Bool(v) => writer
+                .write_be::<u32>(if *v { 1 } else { 0 })
+                .context(format!("Writing bool value {v}")),
+            ModSettingValue::Number(v) => writer
+                .write_be::<f64>(*v)
+                .context(format!("Writing number value {v}")),
             ModSettingValue::String(v) => {
                 let len = v.len();
                 (|| {
-                    writer.write_be::<u32>(len as u32).context(format!("Writing string length {len}"))?;
+                    writer
+                        .write_be::<u32>(len as u32)
+                        .context(format!("Writing string length {len}"))?;
                     let key_buf = v.as_bytes();
                     writer.write_all(key_buf).context("Writing string value")?;
-                    Ok(())
-                })().context(format!("Writing string {v}"))
+                    Ok::<_, Error>(())
+                })()
+                .context(format!("Writing string {v}"))
             }
         }
     }
@@ -260,19 +297,29 @@ impl ModSetting {
     where
         W: Write,
     {
-        writer
-            .write_be::<u32>(self.key.len() as u32)
-            .context("Writing key length")?;
-        let key_buf = self.key.as_bytes();
-        writer.write_all(key_buf).context("Writing key")?;
-        writer.write_be::<u32>(self.values.current.type_int());
-        writer.write_be::<u32>(self.values.next.type_int());
         (|| {
-            self.values.current.save(&mut writer).context("Saving current value")?;
-            self.values.current.save(&mut writer).context("Saving next value")?;
+            writer
+                .write_be::<u32>(self.key.len() as u32)
+                .context("Writing key length")?;
+            let key_buf = self.key.as_bytes();
+            writer.write_all(key_buf).context("Writing key")?;
+            writer
+                .write_be::<u32>(self.values.current.type_int())
+                .context("Writing current type")?;
+            writer
+                .write_be::<u32>(self.values.next.type_int())
+                .context("Writing next type")?;
+            self.values
+                .current
+                .save(&mut writer)
+                .context("Writing current value")?;
+            self.values
+                .current
+                .save(&mut writer)
+                .context("Writing next value")?;
             Ok::<_, Error>(())
         })()
-        .context(format!("Saving setting with key {}", self.key))
+        .context(format!("Writing setting with key {}", self.key))
     }
 }
 
@@ -285,10 +332,10 @@ impl ModSettings {
         let mut settings = HashMap::new();
         let mut decompressed =
             ByteVec(decompress_file(reader, file_size).context("Decompressing file")?);
-        // File::create("./mod_settings")
-        //     .unwrap()
-        //     .write_all(&decompressed.0)
-        //     .unwrap();
+        File::create("./mod_settings")
+            .unwrap()
+            .write_all(&decompressed.0)
+            .unwrap();
         let expected_num_entries = decompressed
             .read_be::<u64>()
             .context("Reading expected entries")?;
@@ -306,5 +353,18 @@ impl ModSettings {
         Ok(ModSettings(settings))
     }
 
-    pub fn save<W>(writer: W) -> anyhow::Result<()> {}
+    pub fn save<W>(&self, writer: W) -> anyhow::Result<()>
+    where
+        W: Write,
+    {
+        let mut buf = ByteVec(Vec::new());
+        for (key, values) in self.0.iter() {
+            ModSetting {
+                key: key.clone(),
+                values: values.clone(),
+            }
+            .save(&mut buf)?; // TODO: remove clones
+        }
+        compress_file(writer, &buf.0).context("Compressing to file")
+    }
 }

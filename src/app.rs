@@ -1,7 +1,7 @@
 use std::{
     collections::HashMap,
     fs::{self, File},
-    io::{BufReader, Read, Write},
+    io::{BufReader, BufWriter, Read, Write},
     path::Path,
 };
 
@@ -420,7 +420,7 @@ impl App<'_, '_> {
                 .len() as usize,
         )
         .context(format!("Loading mod settings {}", mod_settings.display()))?;
-        dbg!(&mod_settings);
+        mod_settings.save(BufWriter::new(File::create("./saved_settings")?))?;
 
         Ok(App {
             mod_config,
