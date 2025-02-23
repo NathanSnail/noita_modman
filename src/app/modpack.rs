@@ -304,8 +304,17 @@ impl ModPack {
     }
 
     pub fn render(&self, ui: &mut Ui) {
+        ui.label(&self.name);
         for nmod in self.mods.iter() {
             ui.label(nmod);
+        }
+    }
+
+    pub fn new(name: &str, mods: &[String], settings: &ModSettings) -> ModPack {
+        ModPack {
+            name: name.to_owned(),
+            mods: mods.to_vec(),
+            settings: settings.clone(),
         }
     }
 }
