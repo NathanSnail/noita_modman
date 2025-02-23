@@ -477,7 +477,6 @@ impl App<'_, '_> {
             "Loading mod settings {}",
             self.mod_settings_file.display()
         ))?;
-        bail!("Explode violently");
         // mod_settings.save(BufWriter::new(File::create("./saved_settings")?))?;
         Ok(())
     }
