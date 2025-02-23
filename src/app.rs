@@ -74,7 +74,7 @@ impl App<'_, '_> {
     fn render_mods_panel(&mut self, ui: &mut Ui) {
         if self.row_rect == None {
             if let Some(nmod) = self.mods.get_mut(0) {
-                self.row_rect = Some(nmod.render(ui).full_rect);
+                self.row_rect = Some(nmod.render(ui, self.init_errored).full_rect);
                 ui.ctx().request_repaint();
             }
         }
@@ -206,13 +206,13 @@ impl App<'_, '_> {
                     }
 
                     // largely pilfered from Ui::dnd_drag_source
-                    if ui.ctx().is_being_dragged(id) {
+                    if ui.ctx().is_being_dragged(id) && !self.init_errored {
                         DragAndDrop::set_payload(ui.ctx(), payload);
 
                         let layer_id = LayerId::new(Order::Tooltip, id);
                         let response = ui
                             .scope_builder(UiBuilder::new().layer_id(layer_id), |ui| {
-                                nmod.render(ui)
+                                nmod.render(ui, self.init_errored)
                             })
                             .response;
 
@@ -225,10 +225,14 @@ impl App<'_, '_> {
                         }
                         None
                     } else {
-                        let scoped = ui.scope(|ui| nmod.render(ui));
+                        let scoped = ui.scope(|ui| nmod.render(ui, self.init_errored));
                         let inner = scoped.inner;
                         ui.interact(inner.text_rect, id, Sense::drag())
-                            .on_hover_cursor(egui::CursorIcon::Grab)
+                            .on_hover_cursor(if self.init_errored {
+                                egui::CursorIcon::NotAllowed
+                            } else {
+                                egui::CursorIcon::Grab
+                            })
                             .on_hover_text(inner.text_hover);
                         if do_dnd && scoped.response.contains_pointer() {
                             if let Some(pointer) = ui.input(|i| i.pointer.interact_pos()) {
