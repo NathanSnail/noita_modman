@@ -82,12 +82,17 @@ impl Mod {
     }
 
     // returns the rect of the text and it's hover text for dragging
-    pub fn render(&mut self, ui: &mut egui::Ui) -> ModRenderResponse {
+    pub fn render(&mut self, ui: &mut egui::Ui, errored: bool) -> ModRenderResponse {
         let full = ui.horizontal(|ui| {
             ui.fixed_size_group(28.0, |ui| match &mut self.kind {
                 ModKind::Normal(normal_mod) => {
-                    ui.checkbox(&mut normal_mod.enabled, "")
-                        .on_hover_text("Enabled");
+                    ui.scope(|ui| {
+                        if errored {
+                            ui.disable();
+                        }
+                        ui.checkbox(&mut normal_mod.enabled, "")
+                            .on_hover_text("Enabled");
+                    });
                 }
                 _ => {}
             });
