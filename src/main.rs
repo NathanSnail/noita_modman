@@ -25,23 +25,5 @@ fn main() -> anyhow::Result<()> {
     )
     .context("Creating app")?;
 
-    let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
-        ..Default::default()
-    };
-    let result = eframe::run_native(
-        "Noita Mod Manager",
-        options,
-        Box::new(|cc| {
-            egui_extras::install_image_loaders(&cc.egui_ctx);
-            cc.egui_ctx.style_mut(|style| {
-                style.text_styles.insert(
-                    egui::TextStyle::Body,
-                    FontId::new(20.0, egui::FontFamily::Proportional),
-                );
-            });
-            Ok(Box::new(app))
-        }),
-    );
-    result.map_err(|x| anyhow!(format!("{x:?}")))
+    app.run().context("Running app")
 }

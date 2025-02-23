@@ -370,6 +370,9 @@ impl ModSetting {
 }
 
 impl ModSettings {
+    pub fn empty() -> ModSettings {
+        ModSettings(HashMap::new())
+    }
     // basically a port of dexters https://github.com/dextercd/NoitaSettings/blob/main/settings_main.cpp
     pub fn load<R>(reader: R, file_size: usize) -> anyhow::Result<ModSettings>
     where

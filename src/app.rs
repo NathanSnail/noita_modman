@@ -5,10 +5,10 @@ use std::{
     path::Path,
 };
 
-use anyhow::{bail, Context};
+use anyhow::{anyhow, bail, Context};
 use egui::{
-    emath, vec2, Color32, DragAndDrop, Id, InnerResponse, LayerId, Order, Rangef, Rect, Sense, Ui,
-    UiBuilder, Window,
+    emath, vec2, Button, Color32, DragAndDrop, FontId, Id, InnerResponse, LayerId, Order, Rangef,
+    Rect, Sense, Ui, UiBuilder, Window,
 };
 use modpack::{ModPack, ModSettings};
 use xmltree::{Element, XMLNode};
@@ -45,12 +45,16 @@ impl<'a> Popup<'a> {
 pub struct App<'a, 'b> {
     search: String,
     mod_config: &'a Path,
+    mods_dir: Option<&'a Path>,
+    workshop_dir: Option<&'a Path>,
+    mod_settings_file: &'a Path,
     mods: Vec<Mod>,
     modpacks: Vec<ModPack>,
     popups: Vec<Popup<'b>>,
     global_id: usize,
     row_rect: Option<Rect>,
     mod_settings: ModSettings,
+    init_errored: bool,
 }
 
 #[derive(Clone, Debug)]
@@ -62,7 +66,9 @@ pub struct ModConfigItem {
 
 impl App<'_, '_> {
     fn render_modlist_panel(&mut self, ui: &mut Ui) {
-        for modpack in self.modpacks.iter() {}
+        for modpack in self.modpacks.iter() {
+            modpack.render(ui);
+        }
     }
 
     fn render_mods_panel(&mut self, ui: &mut Ui) {
@@ -75,8 +81,9 @@ impl App<'_, '_> {
 
         ui.heading("Mod Manager");
         if ui
-            .button("Save")
+            .add_enabled(!self.init_errored, Button::new("Save"))
             .on_hover_text("Save mod config for use in game (requires restarting Noita)")
+            .on_disabled_hover_text("Cannot save when there was an error starting the mod manager, fix the errors then save.")
             .clicked()
         {
             if let Err(error) = self.save_mods().context("While saving mod config") {
@@ -431,20 +438,15 @@ impl App<'_, '_> {
         Ok(mods)
     }
 
-    pub fn new<'a, 'b>(
-        mod_config: &'a Path,
-        workshop_dir: Option<&Path>,
-        mods_dir: Option<&Path>,
-        mod_settings: &Path,
-    ) -> anyhow::Result<App<'a, 'b>> {
+    fn init(&mut self) -> anyhow::Result<()> {
         let mut mods = Vec::new();
-        if let Some(dir) = mods_dir {
+        if let Some(dir) = self.mods_dir {
             mods.extend(
                 Self::load_dir(dir, false)
                     .context(format!("Loading mods dir {}", dir.display()))?,
             );
         }
-        if let Some(dir) = workshop_dir {
+        if let Some(dir) = self.workshop_dir {
             mods.extend(
                 Self::load_dir(dir, true)
                     .context(format!("Loading workshop mods dir {}", dir.display()))?,
@@ -452,38 +454,82 @@ impl App<'_, '_> {
         }
 
         let config = Self::parse_config(BufReader::new(
-            File::open(mod_config)
-                .context(format!("Opening mod config {}", mod_config.display()))?,
+            File::open(self.mod_config)
+                .context(format!("Opening mod config {}", self.mod_config.display()))?,
         ))
-        .context(format!("Parsing mod config {}", mod_config.display()))?;
-        let mods = Self::sort_mods(&mods, &config).context("Sorting mods")?;
+        .context(format!("Parsing mod config {}", self.mod_config.display()))?;
+        self.mods = Self::sort_mods(&mods, &config).context("Sorting mods")?;
 
-        let file = BufReader::new(
-            File::open(mod_settings)
-                .context(format!("Opening mod settings {}", mod_settings.display()))?,
-        );
-        let mod_settings = ModSettings::load(
+        let file = BufReader::new(File::open(self.mod_settings_file).context(format!(
+            "Opening mod settings {}",
+            self.mod_settings_file.display()
+        ))?);
+        self.mod_settings = ModSettings::load(
             file,
-            fs::metadata(mod_settings)
+            fs::metadata(self.mod_settings_file)
                 .context(format!(
                     "Getting metadata for mod settings {}",
-                    mod_settings.display()
+                    self.mod_settings_file.display()
                 ))?
                 .len() as usize,
         )
-        .context(format!("Loading mod settings {}", mod_settings.display()))?;
+        .context(format!(
+            "Loading mod settings {}",
+            self.mod_settings_file.display()
+        ))?;
+        bail!("Explode violently");
         // mod_settings.save(BufWriter::new(File::create("./saved_settings")?))?;
+        Ok(())
+    }
 
+    pub fn new<'a, 'b>(
+        mod_config: &'a Path,
+        workshop_dir: Option<&'a Path>,
+        mods_dir: Option<&'a Path>,
+        mod_settings: &'a Path,
+    ) -> anyhow::Result<App<'a, 'b>> {
         Ok(App {
             mod_config,
             search: "".to_owned(),
-            mods,
+            mods_dir,
+            workshop_dir,
+            mod_settings_file: mod_settings,
+            mods: Vec::new(),
             popups: Vec::new(),
             global_id: 0,
             row_rect: None,
             modpacks: Vec::new(),
-            mod_settings,
+            mod_settings: ModSettings::empty(),
+            init_errored: false,
         })
+    }
+
+    pub fn run(mut self) -> anyhow::Result<()> {
+        if let Err(e) = self.init() {
+            self.create_error(e);
+            self.init_errored = true;
+        }
+
+        let options = eframe::NativeOptions {
+            viewport: egui::ViewportBuilder::default().with_inner_size([320.0, 240.0]),
+            ..Default::default()
+        };
+        let result = eframe::run_native(
+            "Noita Mod Manager",
+            options,
+            Box::new(|cc| {
+                egui_extras::install_image_loaders(&cc.egui_ctx);
+                cc.egui_ctx.style_mut(|style| {
+                    style.text_styles.insert(
+                        egui::TextStyle::Body,
+                        FontId::new(20.0, egui::FontFamily::Proportional),
+                    );
+                });
+                Ok(Box::new(self))
+            }),
+        );
+
+        result.map_err(|x| anyhow!(format!("{x:?}")))
     }
 
     fn save_mods(&self) -> anyhow::Result<()> {
@@ -536,9 +582,8 @@ impl eframe::App for App<'_, '_> {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
         self.popups.retain(|popup| popup.show(&ctx));
 
-        egui::SidePanel::right(Id::new("right panel")).show(ctx, |ui| {
-            ui.label("hi");
-        });
+        egui::SidePanel::right(Id::new("Right Panel"))
+            .show(ctx, |ui| self.render_modlist_panel(ui));
 
         egui::CentralPanel::default().show(ctx, |ui| self.render_mods_panel(ui));
     }
