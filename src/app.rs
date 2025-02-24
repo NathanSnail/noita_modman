@@ -92,7 +92,7 @@ impl App<'_, '_> {
                             false
                         }
                     })
-                    .map(|e| e.name.clone())
+                    .map(|e| e.id.clone())
                     .collect::<Vec<_>>(),
                 &ModSettings::empty(),
             );

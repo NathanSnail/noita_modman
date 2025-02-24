@@ -402,7 +402,6 @@ impl ModSettings {
         while decompressed.0.len() != 0 {
             let setting = ModSetting::load(&mut decompressed)
                 .context(format!("Loading setting number {num_entries}"))?;
-            dbg!(&setting);
             num_entries += 1;
             settings.insert(setting.key, setting.values);
         }
