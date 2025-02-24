@@ -1,17 +1,14 @@
 use std::{
     cmp::min,
     collections::HashMap,
-    fs::File,
     io::{Read, Write},
-    path::Path,
 };
 
 use anyhow::{anyhow, bail, Context, Error};
-use bytemuck::{AnyBitPattern, Pod};
 use egui::Ui;
 use fastlz;
 
-use crate::{ext::ByteReaderExt, ext::ByteWriterExt, r#mod::Mod};
+use crate::{ext::ByteReaderExt, ext::ByteWriterExt};
 
 #[derive(Clone, Debug)]
 enum ModSettingValue {
@@ -316,6 +313,10 @@ impl ModPack {
             mods: mods.to_vec(),
             settings: settings.clone(),
         }
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
     }
 }
 
