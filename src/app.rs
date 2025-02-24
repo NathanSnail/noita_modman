@@ -85,6 +85,13 @@ impl App<'_, '_> {
                     .mod_list
                     .mods
                     .iter()
+                    .filter(|e| {
+                        if let ModKind::Normal(nmod) = e.kind {
+                            nmod.enabled
+                        } else {
+                            false
+                        }
+                    })
                     .map(|e| e.name.clone())
                     .collect::<Vec<_>>(),
                 &ModSettings::empty(),
@@ -94,7 +101,16 @@ impl App<'_, '_> {
                 File::create(path).context(format!("Creating modpack {}", &self.mod_pack.name))?,
             ))
             .context(format!("Saving modpack {}", &self.mod_pack.name))?;
-            self.mod_pack.modpacks.push(pack);
+            if let Some(found) = self
+                .mod_pack
+                .modpacks
+                .iter_mut()
+                .find(|e| e.name() == pack.name())
+            {
+                *found = pack;
+            } else {
+                self.mod_pack.modpacks.push(pack);
+            }
         }
         for modpack in self.mod_pack.modpacks.iter() {
             modpack.render(ui);
@@ -163,6 +179,24 @@ impl App<'_, '_> {
             id: self.global_id,
         });
         self.global_id += 1;
+    }
+
+    fn load_modpacks(&mut self, dir: &Path) -> anyhow::Result<()> {
+        let mut packs = Vec::new();
+        for file in fs::read_dir(dir).context(format!("Reading modpack dir {}", dir.display()))? {
+            let file = file.context(format!("Accessing file for modpack dir {}", dir.display()))?;
+            let reader = BufReader::new(
+                File::open(file.path())
+                    .context(format!("Opening modpack file {}", file.path().display()))?,
+            );
+            let pack = ModPack::load(reader).context(format!(
+                "Loading modpack from file {}",
+                file.path().display()
+            ))?;
+            packs.push(pack);
+        }
+        self.mod_pack.modpacks = packs;
+        Ok(())
     }
 
     fn render_dnd_modlist(&mut self, ui: &mut Ui, conditions: &[Condition]) {
@@ -519,6 +553,8 @@ impl App<'_, '_> {
             "Loading mod settings {}",
             self.mod_settings_file.display()
         ))?;
+        self.load_modpacks(Path::new("./modpacks/"))
+            .context("Loading modpacks")?;
         // mod_settings.save(BufWriter::new(File::create("./saved_settings")?))?;
         Ok(())
     }
