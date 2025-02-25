@@ -45,6 +45,7 @@ impl<'a> Popup<'a> {
 struct ModListConfig {
     search: String,
     mods: Vec<Mod>,
+    mod_settings: ModSettings,
 }
 
 struct ModPackConfig {
@@ -64,8 +65,6 @@ pub struct App<'a, 'b> {
     global_id: usize,
     row_rect: Option<Rect>,
     init_errored: bool,
-
-    mod_settings: ModSettings,
 }
 
 #[derive(Clone, Debug)]
@@ -113,7 +112,7 @@ impl App<'_, '_> {
             }
         }
         for modpack in self.mod_pack.modpacks.iter() {
-            modpack.render(ui);
+            modpack.render(ui, &mut self.mod_list);
         }
         Ok(())
     }
@@ -540,7 +539,7 @@ impl App<'_, '_> {
             "Opening mod settings {}",
             self.mod_settings_file.display()
         ))?);
-        self.mod_settings = ModSettings::load(
+        self.mod_list.mod_settings = ModSettings::load(
             file,
             fs::metadata(self.mod_settings_file)
                 .context(format!(
@@ -570,6 +569,7 @@ impl App<'_, '_> {
             mod_list: ModListConfig {
                 search: "".to_owned(),
                 mods: Vec::new(),
+                mod_settings: ModSettings::empty(),
             },
             mods_dir,
             workshop_dir,
@@ -581,7 +581,6 @@ impl App<'_, '_> {
                 name: "".to_owned(),
                 modpacks: Vec::new(),
             },
-            mod_settings: ModSettings::empty(),
             init_errored: false,
         })
     }
