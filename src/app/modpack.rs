@@ -1,6 +1,6 @@
 use std::{
     cmp::min,
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     io::{Read, Write},
 };
 
@@ -8,7 +8,12 @@ use anyhow::{anyhow, bail, Context, Error};
 use egui::Ui;
 use fastlz;
 
-use crate::{ext::ByteReaderExt, ext::ByteWriterExt};
+use crate::{
+    ext::{ByteReaderExt, ByteWriterExt},
+    r#mod::{Mod, ModKind},
+};
+
+use super::ModListConfig;
 
 #[derive(Clone, Debug)]
 enum ModSettingValue {
@@ -242,6 +247,25 @@ impl ModPack {
         .context(format!("Loading pack {err_name}"))
     }
 
+    pub fn apply(&self, mod_list_config: &mut ModListConfig) {
+        let mut enabled_set = HashSet::new();
+        for nmod in &self.mods {
+            enabled_set.insert(nmod);
+        }
+        mod_list_config.mods.iter_mut().for_each(|e| {
+            if let ModKind::Normal(nmod) = &mut e.kind {
+                nmod.enabled = enabled_set.contains(&e.id);
+            } else {
+            }
+        });
+        for (key, values) in self.settings.0.iter() {
+            mod_list_config
+                .mod_settings
+                .0
+                .insert(key.clone(), values.clone());
+        }
+    }
+
     pub fn load<R>(mut reader: R) -> anyhow::Result<ModPack>
     where
         R: Read,
@@ -300,8 +324,13 @@ impl ModPack {
         .context(format!("Saving pack {}", self.name))
     }
 
-    pub fn render(&self, ui: &mut Ui) {
-        ui.label(&self.name);
+    pub fn render(&self, ui: &mut Ui, mod_list_config: &mut ModListConfig) {
+        ui.horizontal(|ui| {
+            ui.label(&self.name);
+            if ui.button("Apply").clicked() {
+                self.apply(mod_list_config);
+            }
+        });
         for nmod in self.mods.iter() {
             ui.label(nmod);
         }
