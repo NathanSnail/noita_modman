@@ -9,7 +9,7 @@ use egui::Ui;
 use fastlz;
 
 use crate::{
-    app::{App, ModListConfig, UiSizedExt},
+    app::{ModListConfig, UiSizedExt},
     ext::{ByteReaderExt, ByteWriterExt},
     icons::UNSAFE,
     r#mod::ModKind,
@@ -255,7 +255,6 @@ impl ModPack {
         mod_list_config.mods.iter_mut().for_each(|e| {
             if let ModKind::Normal(nmod) = &mut e.kind {
                 nmod.enabled = enabled_set.contains(&e.id);
-            } else {
             }
         });
         for (key, values) in self.settings.0.iter() {
