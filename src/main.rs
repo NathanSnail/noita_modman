@@ -4,10 +4,8 @@ mod app;
 mod ext;
 mod icons;
 mod r#mod;
-use anyhow::{anyhow, Context};
+use anyhow::Context;
 use app::App;
-use eframe::egui;
-use egui::FontId;
 use r#mod::Mod;
 
 fn main() -> anyhow::Result<()> {
