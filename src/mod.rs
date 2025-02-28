@@ -2,12 +2,7 @@ use conditional::Condition;
 use egui::{Color32, Rect, RichText};
 pub mod conditional;
 use crate::app::UiSizedExt;
-
-const STEAM: char = '\u{E623}';
-const TRANSLATION: char = '\u{1F4D5}';
-const GAMEMODE: char = '\u{1F30F}';
-const NORMAL: char = '\u{1F5A5}';
-const UNSAFE: char = '\u{26A0}';
+use crate::icons::{GAMEMODE, NORMAL, STEAM, TRANSLATION, UNSAFE};
 
 #[derive(Copy, Clone, Debug)]
 pub enum GitHost {

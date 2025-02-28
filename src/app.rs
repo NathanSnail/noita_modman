@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     fs::{self, File},
     io::{BufReader, BufWriter, Read, Write},
     path::Path,
@@ -111,8 +111,20 @@ impl App<'_, '_> {
                 self.mod_pack.modpacks.push(pack);
             }
         }
+        let installed = self
+            .mod_list
+            .mods
+            .iter()
+            .map(|e| e.id.clone()) // borrow system not expressive enough to do this correctly?
+            .collect::<HashSet<_>>();
+        let mut error = None;
         for modpack in self.mod_pack.modpacks.iter() {
-            modpack.render(ui, &mut self.mod_list);
+            if let Some(err) = modpack.render(ui, &mut self.mod_list, &installed) {
+                error = Some(err);
+            }
+        }
+        if let Some(err) = error {
+            self.create_error(anyhow!(err));
         }
         Ok(())
     }
