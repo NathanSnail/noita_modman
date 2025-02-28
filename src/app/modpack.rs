@@ -9,11 +9,11 @@ use egui::Ui;
 use fastlz;
 
 use crate::{
+    app::{App, ModListConfig, UiSizedExt},
     ext::{ByteReaderExt, ByteWriterExt},
-    r#mod::{Mod, ModKind},
+    icons::UNSAFE,
+    r#mod::ModKind,
 };
-
-use super::ModListConfig;
 
 #[derive(Clone, Debug)]
 enum ModSettingValue {
@@ -238,7 +238,7 @@ impl ModPack {
                 settings.insert(setting.key, setting.values);
             }
 
-            Ok::<ModPack, anyhow::Error>(ModPack {
+            Ok::<ModPack, Error>(ModPack {
                 name,
                 mods,
                 settings: ModSettings(settings),
@@ -324,16 +324,50 @@ impl ModPack {
         .context(format!("Saving pack {}", self.name))
     }
 
-    pub fn render(&self, ui: &mut Ui, mod_list_config: &mut ModListConfig) {
+    /// Returns an optional error message which should be displayed, can't borrow `&mut App` because we need to iterate over modpacks when calling this
+    pub fn render(
+        &self,
+        ui: &mut Ui,
+        mod_list: &mut ModListConfig,
+        installed: &HashSet<String>,
+    ) -> Option<String> {
         ui.horizontal(|ui| {
-            ui.label(&self.name);
-            if ui.button("Apply").clicked() {
-                self.apply(mod_list_config);
+            let mut error: Option<String> = None;
+            for nmod in self.mods.iter() {
+                if !installed.contains(nmod) {
+                    error = Some(
+                        error
+                            .clone() // TODO: this is not needed, find a way to fix
+                            .map_or_else(|| nmod.clone(), |e| e + "\n" + nmod),
+                    );
+                }
             }
-        });
-        for nmod in self.mods.iter() {
-            ui.label(nmod);
-        }
+
+            // on_hover_ui is lazy so we can't set the error in it
+            ui.label(&self.name).on_hover_ui(|ui| {
+                for nmod in self.mods.iter() {
+                    ui.fixed_size_group(40.0, |ui| {
+                        if !installed.contains(nmod) {
+                            ui.label(format!("{UNSAFE}"))
+                                .on_hover_text("Missing this mod");
+                        }
+                    });
+                    ui.label(nmod);
+                }
+            });
+
+            if ui.button("Apply").clicked() {
+                self.apply(mod_list);
+                if let Some(err) = error {
+                    Some("Missing mods:\n".to_owned() + &err)
+                } else {
+                    None
+                }
+            } else {
+                None
+            }
+        })
+        .inner
     }
 
     pub fn new(name: &str, mods: &[String], settings: &ModSettings) -> ModPack {

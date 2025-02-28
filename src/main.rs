@@ -2,6 +2,7 @@ use std::path::Path;
 
 mod app;
 mod ext;
+mod icons;
 mod r#mod;
 use anyhow::{anyhow, Context};
 use app::App;
