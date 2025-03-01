@@ -2,6 +2,7 @@ use std::{
     cmp::min,
     collections::{HashMap, HashSet},
     io::{Read, Write},
+    iter::zip,
 };
 
 use anyhow::{anyhow, bail, Context, Error};
@@ -248,15 +249,35 @@ impl ModPack {
     }
 
     pub fn apply(&self, mod_list_config: &mut ModListConfig) {
-        let mut enabled_set = HashSet::new();
-        for nmod in &self.mods {
-            enabled_set.insert(nmod);
+        let mut enabled = HashMap::new();
+        for (i, nmod) in self.mods.iter().enumerate() {
+            enabled.insert(nmod, i);
         }
-        mod_list_config.mods.iter_mut().for_each(|e| {
-            if let ModKind::Normal(nmod) = &mut e.kind {
-                nmod.enabled = enabled_set.contains(&e.id);
-            }
-        });
+
+        // TODO: make this fast with swaps
+        let mut enabled_mods = Vec::new();
+        let mut enabled_idxs = Vec::new();
+        mod_list_config
+            .mods
+            .iter_mut()
+            .enumerate()
+            .for_each(|(i, e)| {
+                if let ModKind::Normal(nmod) = &mut e.kind {
+                    if let Some(v) = enabled.get(&e.id) {
+                        nmod.enabled = true;
+                        enabled_mods.push((e.clone(), *v));
+                        enabled_idxs.push(i);
+                    } else {
+                        nmod.enabled = false;
+                    }
+                }
+            });
+
+        enabled_mods.sort_by_key(|e| e.1);
+        for (nmod, idx) in zip(enabled_mods, enabled_idxs) {
+            mod_list_config.mods[idx] = nmod.0;
+        }
+
         for (key, values) in self.settings.0.iter() {
             mod_list_config
                 .mod_settings
