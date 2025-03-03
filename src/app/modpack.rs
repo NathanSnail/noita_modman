@@ -266,11 +266,8 @@ impl ModPack {
                 .write_le::<usize>(0)
                 .context("Writing modpack schema version")?;
             writer
-                .write_le::<usize>(self.name.len())
-                .context("Writing modpack name length")?;
-            writer
-                .write_all(self.name.as_bytes())
-                .context("Writing modpack name")?;
+                .write_str::<usize>(&self.name, Little)
+                .context("Writing modpack data")?;
             writer
                 .write_le::<usize>(self.mods.len())
                 .context("Writing modpack number of mods")?;
