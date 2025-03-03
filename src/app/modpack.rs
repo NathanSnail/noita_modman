@@ -180,15 +180,9 @@ impl ModPack {
             let mut mods = Vec::with_capacity(num_mods);
 
             for _ in 0..num_mods {
-                let mod_name_len = reader
-                    .read_le::<usize>()
-                    .context(format!("Reading mod name length"))?;
-                let mut mod_name_buf = vec![0; mod_name_len];
-                reader
-                    .read_exact(&mut mod_name_buf)
+                let mod_name = reader
+                    .read_str::<usize>(Little)
                     .context("Reading mod name")?;
-                let mod_name =
-                    String::from_utf8(mod_name_buf).context("Converting mod name to utf8")?;
                 mods.push(mod_name);
             }
 
