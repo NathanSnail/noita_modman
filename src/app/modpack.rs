@@ -73,10 +73,7 @@ impl Write for ByteVec {
     }
 }
 
-fn decompress_file<R>(mut reader: R, file_size: usize) -> anyhow::Result<Vec<u8>>
-where
-    R: Read,
-{
+fn decompress_file<R: Read>(mut reader: R, file_size: usize) -> anyhow::Result<Vec<u8>> {
     let compressed_size = reader.read_le::<u32>().context("Reading compressed size")?;
     if compressed_size as usize + 8 != file_size {
         bail!(
@@ -107,10 +104,7 @@ where
     Ok(output)
 }
 
-fn compress_file<W>(mut writer: W, buf: &[u8]) -> anyhow::Result<()>
-where
-    W: Write,
-{
+fn compress_file<W: Write>(mut writer: W, buf: &[u8]) -> anyhow::Result<()> {
     let mut output = vec![0; buf.len() * 2]; // according to dexter code fastlz isn't worse than this
     let output_slice =
         fastlz::compress(&(buf), &mut output).map_err(|_| anyhow!("FastLZ failed to compress"))?;
@@ -127,10 +121,7 @@ where
 }
 
 impl ModSettingValue {
-    fn load<R>(mut reader: R, setting_type: u32) -> anyhow::Result<ModSettingValue>
-    where
-        R: Read,
-    {
+    fn load<R: Read>(mut reader: R, setting_type: u32) -> anyhow::Result<ModSettingValue> {
         match setting_type {
             0 => Ok(ModSettingValue::None),
             1 => match reader.read_be::<u32>().context("Reading bool value")? {
@@ -166,10 +157,7 @@ impl ModSettingValue {
     }
 
     /// Note that you need to save the type yourself via [`type_int`], as it is seperated from the value
-    fn save<W>(&self, mut writer: W) -> anyhow::Result<()>
-    where
-        W: Write,
-    {
+    fn save<W: Write>(&self, mut writer: W) -> anyhow::Result<()> {
         match self {
             ModSettingValue::None => Ok(()),
             ModSettingValue::Bool(v) => writer
@@ -195,10 +183,7 @@ impl ModSettingValue {
 }
 
 impl ModPack {
-    fn load_v0<R>(mut reader: R) -> anyhow::Result<ModPack>
-    where
-        R: Read,
-    {
+    fn load_v0<R: Read>(mut reader: R) -> anyhow::Result<ModPack> {
         let name_len = reader
             .read_le::<usize>()
             .context("Reading modpack name length")?;
@@ -286,10 +271,7 @@ impl ModPack {
         }
     }
 
-    pub fn load<R>(mut reader: R) -> anyhow::Result<ModPack>
-    where
-        R: Read,
-    {
+    pub fn load<R: Read>(mut reader: R) -> anyhow::Result<ModPack> {
         let version = reader
             .read_le::<usize>()
             .context("Reading modpack schema version")?;
@@ -299,10 +281,7 @@ impl ModPack {
         }
     }
 
-    pub fn save<W>(&self, mut writer: W) -> anyhow::Result<()>
-    where
-        W: Write,
-    {
+    pub fn save<W: Write>(&self, mut writer: W) -> anyhow::Result<()> {
         (|| {
             writer
                 .write_le::<usize>(0)
@@ -404,10 +383,7 @@ impl ModPack {
 }
 
 impl ModSetting {
-    pub fn load<R>(mut reader: R) -> anyhow::Result<ModSetting>
-    where
-        R: Read,
-    {
+    pub fn load<R: Read>(mut reader: R) -> anyhow::Result<ModSetting> {
         let key_len = reader.read_be::<u32>().context("Reading key length")?;
         let mut buf = vec![0; key_len as usize];
         reader.read_exact(&mut buf).context("Reading key")?;
@@ -432,10 +408,7 @@ impl ModSetting {
         })
     }
 
-    pub fn save<W>(&self, mut writer: W) -> anyhow::Result<()>
-    where
-        W: Write,
-    {
+    pub fn save<W: Write>(&self, mut writer: W) -> anyhow::Result<()> {
         (|| {
             writer
                 .write_be::<u32>(self.key.len() as u32)
@@ -467,10 +440,7 @@ impl ModSettings {
         ModSettings(HashMap::new())
     }
     // basically a port of dexters https://github.com/dextercd/NoitaSettings/blob/main/settings_main.cpp
-    pub fn load<R>(reader: R, file_size: usize) -> anyhow::Result<ModSettings>
-    where
-        R: Read,
-    {
+    pub fn load<R: Read>(reader: R, file_size: usize) -> anyhow::Result<ModSettings> {
         let mut settings = HashMap::new();
         let mut decompressed =
             ByteVec(decompress_file(reader, file_size).context("Decompressing file")?);
@@ -495,10 +465,7 @@ impl ModSettings {
         Ok(ModSettings(settings))
     }
 
-    pub fn save<W>(&self, writer: W) -> anyhow::Result<()>
-    where
-        W: Write,
-    {
+    pub fn save<W: Write>(&self, writer: W) -> anyhow::Result<()> {
         let mut buf = ByteVec(Vec::new());
         buf.write_be::<u64>(self.0.len() as u64)
             .context("Writing number of settings")?;
