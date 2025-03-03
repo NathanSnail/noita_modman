@@ -11,7 +11,10 @@ use fastlz;
 
 use crate::{
     app::{ModListConfig, UiSizedExt},
-    ext::{ByteReaderExt, ByteWriterExt},
+    ext::{
+        ByteReaderExt, ByteWriterExt,
+        Endianness::{Big, Little},
+    },
     icons::UNSAFE,
     r#mod::ModKind,
 };
@@ -132,17 +135,7 @@ impl ModSettingValue {
             2 => Ok(ModSettingValue::Number(
                 reader.read_be().context("Reading number value")?,
             )),
-            3 => {
-                let size = reader.read_be::<u32>().context("Reading string length")?;
-                let mut buf = vec![0; size as usize];
-                reader.read_exact(&mut buf).context("Reading string data")?;
-                Ok(ModSettingValue::String(
-                    String::from_utf8(buf.clone()).context(
-                        // TODO: another wasteful clone
-                        format!("Converting string data {:?} to utf8", buf),
-                    )?,
-                ))
-            }
+            3 => Ok(ModSettingValue::String(reader.read_str::<u32>(Big)?)),
             4.. => Err(anyhow!("Illegal setting type {setting_type}")),
         }
     }
@@ -166,32 +159,18 @@ impl ModSettingValue {
             ModSettingValue::Number(v) => writer
                 .write_be::<f64>(*v)
                 .context(format!("Writing number value {v}")),
-            ModSettingValue::String(v) => {
-                let len = v.len();
-                (|| {
-                    writer
-                        .write_be::<u32>(len as u32)
-                        .context(format!("Writing string length {len}"))?;
-                    let key_buf = v.as_bytes();
-                    writer.write_all(key_buf).context("Writing string value")?;
-                    Ok::<_, Error>(())
-                })()
-                .context(format!("Writing string {v}"))
-            }
+            ModSettingValue::String(v) => writer
+                .write_str::<u32>(v, Big)
+                .context(format!("Writing string {v}")),
         }
     }
 }
 
 impl ModPack {
     fn load_v0<R: Read>(mut reader: R) -> anyhow::Result<ModPack> {
-        let name_len = reader
-            .read_le::<usize>()
-            .context("Reading modpack name length")?;
-        let mut name_buf = vec![0; name_len];
-        reader
-            .read_exact(&mut name_buf)
+        let name = reader
+            .read_str::<usize>(Little)
             .context("Reading modpack name")?;
-        let name = String::from_utf8(name_buf).context("Converting modpack name to utf8")?;
         let err_name = name.clone();
         (|| {
             let num_mods = reader
@@ -384,11 +363,7 @@ impl ModPack {
 
 impl ModSetting {
     pub fn load<R: Read>(mut reader: R) -> anyhow::Result<ModSetting> {
-        let key_len = reader.read_be::<u32>().context("Reading key length")?;
-        let mut buf = vec![0; key_len as usize];
-        reader.read_exact(&mut buf).context("Reading key")?;
-        let key = String::from_utf8(buf.clone()) // TODO: remove wasteful clone!
-            .context(format!("Converting key {:?} to utf8", buf))?;
+        let key = reader.read_str::<u32>(Big).context("Reading key")?;
         let setting_current_type = reader
             .read_be::<u32>()
             .context(format!("Reading setting {key} current type"))?;
