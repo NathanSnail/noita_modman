@@ -391,10 +391,7 @@ impl App<'_, '_> {
         })
     }
 
-    fn parse_config<R>(src: R) -> anyhow::Result<Vec<ModConfigItem>>
-    where
-        R: Read,
-    {
+    fn parse_config<R: Read>(src: R) -> anyhow::Result<Vec<ModConfigItem>> {
         let tree = Element::parse(src)?;
         tree.children
             .iter()
@@ -654,16 +651,11 @@ impl App<'_, '_> {
 }
 
 pub trait UiSizedExt {
-    fn fixed_size_group<F>(&mut self, size: f32, f: F)
-    where
-        F: FnOnce(&mut Self);
+    fn fixed_size_group<F: FnOnce(&mut Self)>(&mut self, size: f32, f: F);
 }
 
 impl UiSizedExt for egui::Ui {
-    fn fixed_size_group<F>(&mut self, size: f32, f: F)
-    where
-        F: FnOnce(&mut Self),
-    {
+    fn fixed_size_group<F: FnOnce(&mut Self)>(&mut self, size: f32, f: F) {
         let cursor_start = self.cursor().min.x;
         f(self);
         let cursor_end = self.cursor().min.x;
