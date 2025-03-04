@@ -1,5 +1,11 @@
 use std::path::Path;
 
+#[cfg(test)]
+extern crate quickcheck;
+#[cfg(test)]
+#[macro_use(quickcheck)]
+extern crate quickcheck_macros;
+
 mod app;
 mod ext;
 mod icons;
