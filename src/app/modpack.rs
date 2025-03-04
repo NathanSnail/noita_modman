@@ -1,8 +1,8 @@
+use quickcheck::{Arbitrary, Gen};
 use std::{
-    cmp::min,
     collections::{HashMap, HashSet},
     io::{Read, Write},
-    iter::zip,
+    iter::{self, zip},
 };
 
 use anyhow::{anyhow, bail, Context, Error};
@@ -12,14 +12,14 @@ use fastlz;
 use crate::{
     app::{ModListConfig, UiSizedExt},
     ext::{
-        ByteReaderExt, ByteWriterExt,
+        ByteReaderExt, ByteVec, ByteWriterExt,
         Endianness::{Big, Little},
     },
     icons::UNSAFE,
     r#mod::ModKind,
 };
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 enum ModSettingValue {
     /// id 0
     None,
@@ -31,19 +31,19 @@ enum ModSettingValue {
     String(String),
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct ModSettingPair {
     current: ModSettingValue,
     next: ModSettingValue,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 struct ModSetting {
     key: String,
     values: ModSettingPair,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct ModSettings(HashMap<String, ModSettingPair>);
 
 #[derive(Clone, Debug)]
@@ -51,29 +51,6 @@ pub struct ModPack {
     name: String,
     mods: Vec<String>,
     settings: ModSettings,
-}
-
-#[derive(Clone, Debug)]
-struct ByteVec(Vec<u8>);
-
-impl Read for ByteVec {
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let len = min(buf.len(), self.0.len());
-        buf[..len].copy_from_slice(&self.0[..len]);
-        self.0.drain(0..len);
-        Ok(len)
-    }
-}
-
-impl Write for ByteVec {
-    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.0.extend(buf);
-        Ok(buf.len())
-    }
-
-    fn flush(&mut self) -> std::io::Result<()> {
-        Ok(())
-    }
 }
 
 fn decompress_file<R: Read>(mut reader: R, file_size: usize) -> anyhow::Result<Vec<u8>> {
@@ -412,10 +389,6 @@ impl ModSettings {
         let mut settings = HashMap::new();
         let mut decompressed =
             ByteVec(decompress_file(reader, file_size).context("Decompressing file")?);
-        // File::create("./mod_settings")
-        //     .unwrap()
-        //     .write_all(&decompressed.0)
-        //     .unwrap();
         let expected_num_entries = decompressed
             .read_be::<u64>()
             .context("Reading expected entries")?;
@@ -445,5 +418,112 @@ impl ModSettings {
             setting.save(&mut buf)?; // TODO: remove clones
         }
         compress_file(writer, &buf.0).context("Compressing to file")
+    }
+}
+
+#[derive(Copy, Clone, PartialEq)]
+struct NonNaNF64(f64); // NaN is stupid and isn't equal to itself, so don't test for it
+
+impl Arbitrary for NonNaNF64 {
+    fn arbitrary(g: &mut Gen) -> Self {
+        loop {
+            let value = f64::arbitrary(g);
+            if !value.is_nan() {
+                return NonNaNF64(value);
+            }
+        }
+    }
+
+    fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
+        Box::new(self.0.shrink().filter(|v| !v.is_nan()).map(NonNaNF64))
+    }
+}
+
+impl Arbitrary for ModSettingValue {
+    fn arbitrary(g: &mut Gen) -> Self {
+        let n = u32::arbitrary(g);
+        match n % 4 {
+            0 => Self::None,
+            1 => Self::Bool(bool::arbitrary(g)),
+            2 => Self::Number(NonNaNF64::arbitrary(g).0),
+            3 => Self::String(String::arbitrary(g)),
+            _ => unreachable!(),
+        }
+    }
+
+    fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
+        match self {
+            ModSettingValue::None => Box::new(iter::empty()),
+            ModSettingValue::Bool(v) => Box::new(v.shrink().map(ModSettingValue::Bool)),
+            ModSettingValue::Number(v) => Box::new(v.shrink().map(ModSettingValue::Number)),
+            ModSettingValue::String(v) => Box::new(v.shrink().map(ModSettingValue::String)),
+        }
+    }
+}
+
+impl Arbitrary for ModSettingPair {
+    fn arbitrary(g: &mut Gen) -> Self {
+        Self {
+            current: ModSettingValue::arbitrary(g),
+            next: ModSettingValue::arbitrary(g),
+        }
+    }
+
+    fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
+        Box::new(
+            zip(self.next.shrink(), self.current.shrink()) // not ideal but i cannot figure out how to do the proper nested approach
+                .map(|(next, current)| Self { next, current }),
+        )
+        // Box::new(self.current.shrink().flat_map(move |current| {
+        //     self.next.shrink().map(move |next| Self {
+        //         current: current.clone(),
+        //         next: next.clone(),
+        //     })
+        // }))
+    }
+}
+
+impl Arbitrary for ModSettings {
+    fn arbitrary(g: &mut Gen) -> Self {
+        let mut settings = Self(HashMap::new());
+        for _ in 0..(u32::arbitrary(g) % 100) {
+            settings
+                .0
+                .insert(String::arbitrary(g), ModSettingPair::arbitrary(g));
+        }
+        settings
+    }
+
+    fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
+        Box::new(self.0.shrink().map(Self))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::ModSettings;
+    use super::{compress_file, decompress_file};
+    use crate::ext::ByteVec;
+    use anyhow::{anyhow, Error};
+
+    #[quickcheck(props = 1000)]
+    fn save_load_settings(value: ModSettings) -> bool {
+        let mut buffer = ByteVec(Vec::new());
+        value.save(&mut buffer).expect("Saving errored");
+        let len = buffer.0.len();
+        let loaded = ModSettings::load(&mut buffer, len).expect("Loading errored");
+        if value != loaded {
+            Err::<(), Error>(anyhow!("{buffer:?}")).unwrap();
+        }
+        true
+    }
+
+    #[quickcheck(props = 1000)]
+    fn save_load_buffer(value: String) -> bool {
+        let bytes = value.as_bytes();
+        let mut buffer = ByteVec(Vec::new());
+        compress_file(&mut buffer, bytes).expect("Saving errored");
+        let len = buffer.0.len();
+        bytes == decompress_file(&mut buffer, len).expect("Loading errored")
     }
 }

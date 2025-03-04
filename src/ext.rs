@@ -1,4 +1,5 @@
 use std::{
+    cmp::min,
     fmt::{Debug, Display},
     io::{Read, Write},
 };
@@ -109,6 +110,29 @@ impl<W: Write> ByteWriterExt for W {
         .context(format!("Writing string length {len}"))?;
         self.write_all(value.as_bytes())
             .context("Writing string body")?;
+        Ok(())
+    }
+}
+
+#[derive(Clone, Debug)]
+pub struct ByteVec(pub Vec<u8>);
+
+impl Read for ByteVec {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        let len = min(buf.len(), self.0.len());
+        buf[..len].copy_from_slice(&self.0[..len]);
+        self.0.drain(0..len);
+        Ok(len)
+    }
+}
+
+impl Write for ByteVec {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.0.extend(buf);
+        Ok(buf.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
     }
 }
