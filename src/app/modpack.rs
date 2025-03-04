@@ -298,6 +298,7 @@ impl ModPack {
         &self,
         ui: &mut Ui,
         mod_list: &mut ModListConfig,
+        search_term: &mut String,
         installed: &HashSet<String>,
     ) -> Option<String> {
         ui.horizontal(|ui| {
@@ -326,6 +327,7 @@ impl ModPack {
             });
 
             if ui.button("Apply").clicked() {
+                *search_term = self.name.clone();
                 self.apply(mod_list);
                 if let Some(err) = error {
                     Some("Missing mods:\n".to_owned() + &err)
