@@ -76,7 +76,10 @@ pub struct ModConfigItem {
 
 impl App<'_, '_> {
     fn render_modpack_panel(&mut self, ui: &mut Ui) -> anyhow::Result<()> {
-        ui.text_edit_singleline(&mut self.mod_pack.name);
+        ui.horizontal(|ui| {
+            ui.label("Search");
+            ui.text_edit_singleline(&mut self.mod_pack.name);
+        });
         if ui.button("Export as modpack").clicked() {
             let pack = ModPack::new(
                 &self.mod_pack.name,
@@ -118,8 +121,16 @@ impl App<'_, '_> {
             .map(|e| e.id.clone()) // borrow system not expressive enough to do this correctly?
             .collect::<HashSet<_>>();
         let mut error = None;
-        for modpack in self.mod_pack.modpacks.iter() {
-            if let Some(err) = modpack.render(ui, &mut self.mod_list, &installed) {
+        let searching_name = self.mod_pack.name.clone();
+        for modpack in self
+            .mod_pack
+            .modpacks
+            .iter()
+            .filter(|e| e.name().contains(&searching_name))
+        {
+            if let Some(err) =
+                modpack.render(ui, &mut self.mod_list, &mut self.mod_pack.name, &installed)
+            {
                 error = Some(err);
             }
         }
@@ -137,16 +148,6 @@ impl App<'_, '_> {
             }
         }
 
-        ui.heading("Mod Manager");
-        if ui
-            .add_enabled(!self.init_errored, Button::new("Save"))
-            .on_hover_text("Save mod config for use in game (requires restarting Noita)")
-            .on_disabled_hover_text("Cannot save when there was an error starting the mod manager, fix the errors then save.")
-            .clicked()
-        {
-             let res = self.save_mods().context("While saving mod config") ;
-             self.result_popup(res);
-        }
         let cur_search = self.mod_list.search.clone();
         let conditions_err: Vec<_> = cur_search
             .split(" ")
@@ -170,6 +171,15 @@ impl App<'_, '_> {
                 });
             }
         });
+        if ui
+            .add_enabled(!self.init_errored, Button::new("Save"))
+            .on_hover_text("Save mod config for use in game (requires restarting Noita)")
+            .on_disabled_hover_text("Cannot save when there was an error starting the mod manager, fix the errors then save.")
+            .clicked()
+        {
+             let res = self.save_mods().context("While saving mod config") ;
+             self.result_popup(res);
+        }
 
         egui::ScrollArea::vertical()
             .auto_shrink(false)
