@@ -559,7 +559,7 @@ mod test {
 
     // TODO: this test fails for some reason
     #[quickcheck(props = 1)]
-    fn example(_: bool) {
+    fn settings(_: bool) {
         let mut map = HashMap::new();
         map.insert(
             "\0\0\u{1}.K\u{2000}𐀀\u{80}ࠀ\0𐁀\0\0\u{80}\0\u{1}\u{1}ࠁ\u{2}".to_string(),
@@ -573,6 +573,15 @@ mod test {
             .save(&mut buffer)
             .expect("Saving must work");
         let len = buffer.0.len();
-        ModSettings::load(&mut buffer, len).expect("Saving must work");
+        ModSettings::load(&mut buffer, len).expect("Loading must work");
+    }
+
+    #[quickcheck(props = 1)]
+    fn compress(_: bool) -> bool {
+        let s = "\u{fff4}\u{2000}\u{fff4}⁀ࠀ\0\0\0\0".to_owned();
+        let mut buffer = ByteVec(Vec::new());
+        compress_file(&mut buffer, s.as_bytes()).expect("Saving must work");
+        let len = buffer.0.len();
+        s.as_bytes() == decompress_file(&mut buffer, len).expect("Loading must work")
     }
 }
