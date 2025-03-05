@@ -32,13 +32,13 @@ enum ModSettingValue {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-struct ModSettingPair {
+pub struct ModSettingPair {
     current: ModSettingValue,
     next: ModSettingValue,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-struct ModSetting {
+pub struct ModSetting {
     key: String,
     values: ModSettingPair,
 }
@@ -331,8 +331,35 @@ impl ModPack {
     }
 }
 
+impl ModSettingValue {
+    pub fn new_none() -> Self {
+        ModSettingValue::None
+    }
+
+    pub fn new_bool(v: bool) -> Self {
+        ModSettingValue::Bool(v)
+    }
+
+    pub fn new_number(v: f64) -> Self {
+        ModSettingValue::Number(v)
+    }
+
+    pub fn new_string(v: String) -> Self {
+        ModSettingValue::String(v)
+    }
+}
+impl ModSettingPair {
+    pub fn new(current: ModSettingValue, next: ModSettingValue) -> Self {
+        Self { current, next }
+    }
+}
+
 impl ModSetting {
-    pub fn load<R: Read>(mut reader: R) -> anyhow::Result<ModSetting> {
+    pub fn new(key: String, values: ModSettingPair) -> Self {
+        Self { key, values }
+    }
+
+    pub fn load<R: Read>(mut reader: R) -> anyhow::Result<Self> {
         let key = reader.read_str::<u32>(Big).context("Reading key")?;
         let setting_current_type = reader
             .read_be::<u32>()
@@ -501,12 +528,15 @@ impl Arbitrary for ModSettings {
 
 #[cfg(test)]
 mod test {
-    use super::ModSettings;
+    use std::collections::HashMap;
+
     use super::{compress_file, decompress_file};
+    use super::{ModSettingValue, ModSettings};
+    use crate::app::modpack::ModSettingPair;
     use crate::ext::ByteVec;
     use anyhow::{anyhow, Error};
 
-    #[quickcheck(props = 1000)]
+    #[quickcheck(props = 10000)]
     fn save_load_settings(value: ModSettings) -> bool {
         let mut buffer = ByteVec(Vec::new());
         value.save(&mut buffer).expect("Saving errored");
@@ -518,12 +548,31 @@ mod test {
         true
     }
 
-    #[quickcheck(props = 1000)]
+    #[quickcheck(props = 10000)]
     fn save_load_buffer(value: String) -> bool {
         let bytes = value.as_bytes();
         let mut buffer = ByteVec(Vec::new());
         compress_file(&mut buffer, bytes).expect("Saving errored");
         let len = buffer.0.len();
         bytes == decompress_file(&mut buffer, len).expect("Loading errored")
+    }
+
+    // TODO: this test fails for some reason
+    #[quickcheck(props = 1)]
+    fn example(_: bool) {
+        let mut map = HashMap::new();
+        map.insert(
+            "\0\0\u{1}.K\u{2000}𐀀\u{80}ࠀ\0𐁀\0\0\u{80}\0\u{1}\u{1}ࠁ\u{2}".to_string(),
+            ModSettingPair::new(
+                ModSettingValue::new_bool(false),
+                ModSettingValue::new_bool(false),
+            ),
+        );
+        let mut buffer = ByteVec(Vec::new());
+        ModSettings(map)
+            .save(&mut buffer)
+            .expect("Saving must work");
+        let len = buffer.0.len();
+        ModSettings::load(&mut buffer, len).expect("Saving must work");
     }
 }

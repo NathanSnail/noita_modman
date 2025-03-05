@@ -136,3 +136,20 @@ impl Write for ByteVec {
         Ok(())
     }
 }
+
+#[cfg(test)]
+mod test {
+    use crate::ext::ByteReaderExt;
+    use crate::ext::ByteVec;
+    use crate::ext::ByteWriterExt;
+    use crate::ext::Endianness::Little;
+
+    #[quickcheck(props = 100000)]
+    fn save_load_string(value: String) -> bool {
+        let mut buffer = ByteVec(Vec::new());
+        buffer
+            .write_str::<usize>(&value, Little)
+            .expect("Saving must work");
+        value == buffer.read_str::<usize>(Little).expect("Loading must work")
+    }
+}
