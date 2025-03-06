@@ -582,6 +582,9 @@ mod test {
         let mut buffer = ByteVec(Vec::new());
         compress_file(&mut buffer, s.as_bytes()).expect("Saving must work");
         let len = buffer.0.len();
-        s.as_bytes() == decompress_file(&mut buffer, len).expect("Loading must work")
+        dbg!(s.as_bytes());
+        let decompressed = decompress_file(&mut buffer, len).expect("Loading must work");
+        dbg!(&decompressed);
+        s.as_bytes() == decompressed
     }
 }
