@@ -1,8 +1,6 @@
 use quickcheck::{Arbitrary, Gen};
 use std::{
-    collections::{HashMap, HashSet},
-    io::{Read, Write},
-    iter::{self, zip},
+    cmp::max, collections::{HashMap, HashSet}, io::{Read, Write}, iter::{self, zip}
 };
 
 use anyhow::{anyhow, bail, Context, Error};
@@ -85,7 +83,7 @@ fn decompress_file<R: Read>(mut reader: R, file_size: usize) -> anyhow::Result<V
 }
 
 fn compress_file<W: Write>(mut writer: W, buf: &[u8]) -> anyhow::Result<()> {
-    let mut output = vec![0; buf.len() * 2]; // according to dexter code fastlz isn't worse than this
+    let mut output = vec![0; max(buf.len() * 2, 128)]; // apparently 5% and 66 bytes is safe, but i have 0 trust of that
     let output_slice =
         fastlz::compress(&(buf), &mut output).map_err(|_| anyhow!("FastLZ failed to compress"))?;
     writer
@@ -578,13 +576,13 @@ mod test {
 
     #[quickcheck(props = 1)]
     fn compress(_: bool) -> bool {
-        let s = "\u{fff4}\u{2000}\u{fff4}⁀ࠀ\0\0\0\0".to_owned();
+        let s = "\u{fff4}\u{2000}\u{fff4}⁀ࠀ\0\0\0\0".as_bytes();
         let mut buffer = ByteVec(Vec::new());
-        compress_file(&mut buffer, s.as_bytes()).expect("Saving must work");
+        compress_file(&mut buffer, s).expect("Saving must work");
         let len = buffer.0.len();
-        dbg!(s.as_bytes());
+        dbg!(s);
         let decompressed = decompress_file(&mut buffer, len).expect("Loading must work");
         dbg!(&decompressed);
-        s.as_bytes() == decompressed
+        s == decompressed
     }
 }
