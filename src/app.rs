@@ -232,6 +232,14 @@ impl App<'_, '_> {
         let mut packs = Vec::new();
         for file in fs::read_dir(dir).context(format!("Reading modpack dir {}", dir.display()))? {
             let file = file.context(format!("Accessing file for modpack dir {}", dir.display()))?;
+            if file
+                .file_name()
+                .to_str()
+                .context(format!("Getting file name {}", file.path().display()))?
+                .starts_with('.')
+            {
+                continue;
+            }
             let reader = BufReader::new(
                 File::open(file.path())
                     .context(format!("Opening modpack file {}", file.path().display()))?,
