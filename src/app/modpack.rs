@@ -1,6 +1,9 @@
 use quickcheck::{Arbitrary, Gen};
 use std::{
-    cmp::max, collections::{HashMap, HashSet}, io::{Read, Write}, iter::{self, zip}
+    cmp::max,
+    collections::{HashMap, HashSet},
+    io::{Read, Write},
+    iter::{self, zip},
 };
 
 use anyhow::{anyhow, bail, Context, Error};
@@ -63,19 +66,10 @@ fn decompress_file<R: Read>(mut reader: R, file_size: usize) -> anyhow::Result<V
     let decompressed_size = reader
         .read_le::<u32>()
         .context("Reading decompressed size")?;
-    let mut compressed = Vec::new();
-    let result = reader.read_to_end(&mut compressed);
-    if compressed_size == decompressed_size {
-        match result {
-            Ok(read) => {
-                if read != decompressed_size as usize {
-                    bail!("Expected to read {decompressed_size} when reading uncompressed file but read {read}");
-                }
-                return Ok(compressed);
-            }
-            Err(err) => return Err(err).context("Reading to end of file"),
-        }
-    }
+    let mut compressed = vec![0; compressed_size as usize];
+    reader
+        .read_exact(&mut compressed)
+        .context("Reading the compressed data to a vec")?;
     let mut output = vec![0; decompressed_size as usize];
     fastlz::decompress(&compressed, &mut output)
         .map_err(|_| anyhow!("FastLZ failed to decompress"))?;
@@ -85,7 +79,8 @@ fn decompress_file<R: Read>(mut reader: R, file_size: usize) -> anyhow::Result<V
 fn compress_file<W: Write>(mut writer: W, buf: &[u8]) -> anyhow::Result<()> {
     let mut output = vec![0; max(buf.len() * 2, 128)]; // apparently 5% and 66 bytes is safe, but i have 0 trust of that
     let output_slice =
-        fastlz::compress(&(buf), &mut output).map_err(|_| anyhow!("FastLZ failed to compress"))?;
+        fastlz::compress(&buf, &mut output).map_err(|_| anyhow!("FastLZ failed to compress"))?;
+    dbg!(&output_slice);
     writer
         .write_le::<u32>(output_slice.len() as u32)
         .context("Writing output length")?;
@@ -573,12 +568,12 @@ mod test {
         let len = buffer.0.len();
         ModSettings::load(&mut buffer, len).expect("Loading must work");
     }
-
     #[quickcheck(props = 1)]
     fn compress(_: bool) -> bool {
         let s = "\u{fff4}\u{2000}\u{fff4}⁀ࠀ\0\0\0\0".as_bytes();
         let mut buffer = ByteVec(Vec::new());
         compress_file(&mut buffer, s).expect("Saving must work");
+        dbg!(&buffer);
         let len = buffer.0.len();
         dbg!(s);
         let decompressed = decompress_file(&mut buffer, len).expect("Loading must work");
