@@ -548,7 +548,6 @@ mod test {
     use crate::ext::ByteVec;
     use anyhow::{anyhow, Error};
 
-    /*
     #[quickcheck]
     fn save_load_settings(value: ModSettings) -> bool {
         let mut buffer = ByteVec(Vec::new());
@@ -560,7 +559,6 @@ mod test {
         }
         true
     }
-    */
 
     #[quickcheck]
     fn save_load_buffer(value: String) -> bool {
@@ -571,7 +569,6 @@ mod test {
         bytes == decompress_file(&mut buffer, len).expect("Loading errored")
     }
 
-    /*
     // TODO: this test fails for some reason
     #[quickcheck]
     fn settings(_: bool) {
@@ -603,5 +600,4 @@ mod test {
         dbg!(&decompressed);
         s == decompressed
     }
-    */
 }
