@@ -569,9 +569,8 @@ mod test {
         bytes == decompress_file(&mut buffer, len).expect("Loading errored")
     }
 
-    // TODO: this test fails for some reason
-    #[quickcheck]
-    fn settings(_: bool) {
+    #[test]
+    fn settings() {
         let mut map = HashMap::new();
         map.insert(
             "\0\0\u{1}.K\u{2000}𐀀\u{80}ࠀ\0𐁀\0\0\u{80}\0\u{1}\u{1}ࠁ\u{2}".to_string(),
@@ -588,8 +587,8 @@ mod test {
         ModSettings::load(&mut buffer, len).expect("Loading must work");
     }
 
-    #[quickcheck]
-    fn compress(_: bool) -> bool {
+    #[test]
+    fn compress() {
         let s = "\u{fff4}\u{2000}\u{fff4}⁀ࠀ\0\0\0\0".as_bytes();
         let mut buffer = ByteVec(Vec::new());
         compress_file(&mut buffer, s).expect("Saving must work");
@@ -598,6 +597,6 @@ mod test {
         dbg!(s);
         let decompressed = decompress_file(&mut buffer, len).expect("Loading must work");
         dbg!(&decompressed);
-        s == decompressed
+        assert_eq!(s, decompressed);
     }
 }

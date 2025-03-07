@@ -144,7 +144,6 @@ mod test {
     use crate::ext::ByteWriterExt;
     use crate::ext::Endianness::Little;
 
-    /*
     #[quickcheck]
     fn save_load_string(value: String) -> bool {
         let mut buffer = ByteVec(Vec::new());
@@ -153,5 +152,4 @@ mod test {
             .expect("Saving must work");
         value == buffer.read_str::<usize>(Little).expect("Loading must work")
     }
-    */
 }
