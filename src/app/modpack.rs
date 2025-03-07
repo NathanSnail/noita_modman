@@ -80,7 +80,6 @@ fn compress_file<W: Write>(mut writer: W, buf: &[u8]) -> anyhow::Result<()> {
     let mut output = vec![0; max(buf.len() * 2, 128)]; // apparently 5% and 66 bytes is safe, but i have 0 trust of that
     let output_slice =
         fastlz::compress(&buf, &mut output).map_err(|_| anyhow!("FastLZ failed to compress"))?;
-    dbg!(&output_slice);
     writer
         .write_le::<u32>(output_slice.len() as u32)
         .context("Writing output length")?;
@@ -568,6 +567,7 @@ mod test {
         let len = buffer.0.len();
         ModSettings::load(&mut buffer, len).expect("Loading must work");
     }
+
     #[quickcheck(props = 1)]
     fn compress(_: bool) -> bool {
         let s = "\u{fff4}\u{2000}\u{fff4}⁀ࠀ\0\0\0\0".as_bytes();
