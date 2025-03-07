@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Context, Error};
-use egui::Ui;
+use egui::{Color32, InnerResponse, Rect, RichText, Ui};
 use fastlz;
 
 use crate::{
@@ -16,7 +16,7 @@ use crate::{
         ByteReaderExt, ByteVec, ByteWriterExt,
         Endianness::{Big, Little},
     },
-    icons::UNSAFE,
+    icons::{UNSAFE, YELLOW},
     r#mod::ModKind,
 };
 
@@ -283,14 +283,26 @@ impl ModPack {
     }
 
     /// Returns an optional error message which should be displayed, can't borrow `&mut App` because we need to iterate over modpacks when calling this
+    /// If you are doing a sizing pass to get the row rect, shade_bg must be false
+    // TODO: make shade_bg an Option<(bool, Rect)> type deal
     pub fn render(
         &self,
         ui: &mut Ui,
         mod_list: &mut ModListConfig,
         search_term: &mut String,
         installed: &HashSet<String>,
-    ) -> Option<String> {
+        shade_bg: bool,
+        row_rect: Option<Rect>,
+    ) -> InnerResponse<Option<String>> {
         ui.horizontal(|ui| {
+            if shade_bg {
+                let painter = ui.painter();
+
+                let mut cursor = ui.cursor();
+                cursor.max.y = cursor.min.y + row_rect.unwrap().height();
+                painter.rect_filled(cursor, 0.0, ui.visuals().faint_bg_color);
+            }
+
             let mut error: Option<String> = None;
             for nmod in self.mods.iter() {
                 if !installed.contains(nmod) {
@@ -301,33 +313,35 @@ impl ModPack {
                     );
                 }
             }
+            error = error.map(|e| "Missing mods:\n".to_owned() + &e);
 
-            // on_hover_ui is lazy so we can't set the error in it
-            ui.label(&self.name).on_hover_ui(|ui| {
-                for nmod in self.mods.iter() {
-                    ui.fixed_size_group(40.0, |ui| {
-                        if !installed.contains(nmod) {
-                            ui.label(format!("{UNSAFE}"))
-                                .on_hover_text("Missing this mod");
-                        }
-                    });
-                    ui.label(nmod);
-                }
-            });
-
-            if ui.button("Apply").clicked() {
+            let result = if ui.button("Apply").clicked() {
                 *search_term = self.name.clone();
                 self.apply(mod_list);
-                if let Some(err) = error {
-                    Some("Missing mods:\n".to_owned() + &err)
+                if let Some(err) = &error {
+                    Some(err.clone())
                 } else {
                     None
                 }
             } else {
                 None
-            }
+            };
+
+            ui.fixed_size_group(40.0, |ui| {
+                if let Some(err) = &error {
+                    ui.label(RichText::new(format!("{UNSAFE}")).color(YELLOW))
+                        .on_hover_text(err);
+                }
+            });
+            // on_hover_ui is lazy so we can't set the error in it
+            ui.label(&self.name).on_hover_ui(|ui| {
+                for nmod in self.mods.iter() {
+                    ui.label(nmod);
+                }
+            });
+
+            result
         })
-        .inner
     }
 
     pub fn new(name: &str, mods: &[String], settings: &ModSettings) -> ModPack {

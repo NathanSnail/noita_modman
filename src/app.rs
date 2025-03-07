@@ -7,8 +7,8 @@ use std::{
 
 use anyhow::{anyhow, bail, Context};
 use egui::{
-    emath, vec2, Button, Color32, DragAndDrop, FontId, Id, InnerResponse, LayerId, Order, Rangef,
-    Rect, Sense, Ui, UiBuilder, Window,
+    emath, vec2, Button, Color32, DragAndDrop, FontId, Grid, Id, InnerResponse, LayerId, Order,
+    Rangef, Rect, Sense, Ui, UiBuilder, Window,
 };
 use modpack::{ModPack, ModSettings};
 use xmltree::{Element, XMLNode};
@@ -51,6 +51,8 @@ struct ModListConfig {
 struct ModPackConfig {
     name: String,
     modpacks: Vec<ModPack>,
+    row_rect: Option<Rect>,
+    installed_mods: HashSet<String>,
 }
 
 pub struct App<'a, 'b> {
@@ -76,6 +78,24 @@ pub struct ModConfigItem {
 
 impl App<'_, '_> {
     fn render_modpack_panel(&mut self, ui: &mut Ui) -> anyhow::Result<()> {
+        if self.mod_pack.row_rect == None {
+            if let Some(pack) = self.mod_pack.modpacks.get_mut(0) {
+                self.mod_pack.row_rect = Some(
+                    pack.render(
+                        ui,
+                        &mut self.mod_list,
+                        &mut "".to_owned(),
+                        &HashSet::new(),
+                        false,
+                        None,
+                    )
+                    .response
+                    .rect,
+                );
+                ui.ctx().request_repaint();
+            }
+        }
+
         ui.horizontal(|ui| {
             ui.label("Search");
             ui.text_edit_singleline(&mut self.mod_pack.name);
@@ -114,26 +134,32 @@ impl App<'_, '_> {
                 self.mod_pack.modpacks.push(pack);
             }
         }
-        let installed = self
-            .mod_list
-            .mods
-            .iter()
-            .map(|e| e.id.clone()) // borrow system not expressive enough to do this correctly?
-            .collect::<HashSet<_>>();
         let mut error = None;
         let searching_name = self.mod_pack.name.clone();
-        for modpack in self
-            .mod_pack
-            .modpacks
-            .iter()
-            .filter(|e| e.name().contains(&searching_name))
-        {
-            if let Some(err) =
-                modpack.render(ui, &mut self.mod_list, &mut self.mod_pack.name, &installed)
+        Grid::new("Modpack Grid").striped(false).show(ui, |ui| {
+            for (i, modpack) in self
+                .mod_pack
+                .modpacks
+                .iter()
+                .filter(|e| e.name().contains(&searching_name))
+                .enumerate()
             {
-                error = Some(err);
+                if let Some(err) = modpack
+                    .render(
+                        ui,
+                        &mut self.mod_list,
+                        &mut self.mod_pack.name,
+                        &self.mod_pack.installed_mods,
+                        i % 2 == 0,
+                        self.mod_pack.row_rect,
+                    )
+                    .inner
+                {
+                    error = Some(err);
+                }
+                ui.end_row();
             }
-        }
+        });
         if let Some(err) = error {
             self.create_error(anyhow!(err));
         }
@@ -574,6 +600,13 @@ impl App<'_, '_> {
         self.load_modpacks(Path::new("./modpacks/"))
             .context("Loading modpacks")?;
         // mod_settings.save(BufWriter::new(File::create("./saved_settings")?))?;
+        let installed = self
+            .mod_list
+            .mods
+            .iter()
+            .map(|e| e.id.clone())
+            .collect::<HashSet<_>>();
+        self.mod_pack.installed_mods = installed;
         Ok(())
     }
 
@@ -599,6 +632,8 @@ impl App<'_, '_> {
             mod_pack: ModPackConfig {
                 name: "".to_owned(),
                 modpacks: Vec::new(),
+                row_rect: None,
+                installed_mods: HashSet::new(),
             },
             init_errored: false,
         })

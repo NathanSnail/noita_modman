@@ -2,7 +2,7 @@ use conditional::Condition;
 use egui::{Color32, Rect, RichText};
 pub mod conditional;
 use crate::app::UiSizedExt;
-use crate::icons::{GAMEMODE, NORMAL, STEAM, TRANSLATION, UNSAFE};
+use crate::icons::{GAMEMODE, NORMAL, STEAM, TRANSLATION, UNSAFE, YELLOW};
 
 #[derive(Copy, Clone, Debug)]
 pub enum GitHost {
@@ -143,11 +143,8 @@ impl Mod {
                         ModKind::Gamemode => "Gamemode mod",
                     });
                     if self.unsafe_api {
-                        ui.label(
-                            RichText::new(format!("{UNSAFE}"))
-                                .color(Color32::from_rgb(255, 220, 40)),
-                        )
-                        .on_hover_text("Unsafe mod");
+                        ui.label(RichText::new(format!("{UNSAFE}")).color(YELLOW))
+                            .on_hover_text("Unsafe mod");
                     }
                 });
             });
