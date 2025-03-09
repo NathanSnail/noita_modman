@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Context, Error};
-use egui::{Color32, InnerResponse, Rect, RichText, Ui};
+use egui::{InnerResponse, Rect, RichText, Ui};
 use fastlz;
 
 use crate::{
@@ -357,29 +357,6 @@ impl ModPack {
     }
 }
 
-impl ModSettingValue {
-    pub fn new_none() -> Self {
-        ModSettingValue::None
-    }
-
-    pub fn new_bool(v: bool) -> Self {
-        ModSettingValue::Bool(v)
-    }
-
-    pub fn new_number(v: f64) -> Self {
-        ModSettingValue::Number(v)
-    }
-
-    pub fn new_string(v: String) -> Self {
-        ModSettingValue::String(v)
-    }
-}
-impl ModSettingPair {
-    pub fn new(current: ModSettingValue, next: ModSettingValue) -> Self {
-        Self { current, next }
-    }
-}
-
 impl ModSetting {
     pub fn new(key: String, values: ModSettingPair) -> Self {
         Self { key, values }
@@ -556,9 +533,8 @@ impl Arbitrary for ModSettings {
 mod test {
     use std::collections::HashMap;
 
-    use super::{compress_file, decompress_file};
-    use super::{ModSettingValue, ModSettings};
-    use crate::app::modpack::ModSettingPair;
+    use super::ModSettings;
+    use super::{compress_file, decompress_file, ModSettingPair, ModSettingValue};
     use crate::ext::ByteVec;
     use anyhow::{anyhow, Error};
 
@@ -588,10 +564,10 @@ mod test {
         let mut map = HashMap::new();
         map.insert(
             "\0\0\u{1}.K\u{2000}𐀀\u{80}ࠀ\0𐁀\0\0\u{80}\0\u{1}\u{1}ࠁ\u{2}".to_string(),
-            ModSettingPair::new(
-                ModSettingValue::new_bool(false),
-                ModSettingValue::new_bool(false),
-            ),
+            ModSettingPair {
+                current: ModSettingValue::Bool(false),
+                next: ModSettingValue::Bool(false),
+            },
         );
         let mut buffer = ByteVec(Vec::new());
         ModSettings(map)

@@ -1,5 +1,5 @@
 use conditional::Condition;
-use egui::{Color32, Rect, RichText};
+use egui::{Rect, RichText};
 pub mod conditional;
 use crate::app::UiSizedExt;
 use crate::icons::{GAMEMODE, NORMAL, STEAM, TRANSLATION, UNSAFE, YELLOW};
