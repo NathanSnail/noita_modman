@@ -3,7 +3,7 @@ use std::{
     cmp::max,
     collections::{HashMap, HashSet},
     io::{Read, Write},
-    iter::{self, zip},
+    iter::{empty, zip},
 };
 
 use anyhow::{anyhow, bail, Context, Error};
@@ -479,7 +479,7 @@ impl Arbitrary for ModSettingValue {
 
     fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
         match self {
-            ModSettingValue::None => Box::new(iter::empty()),
+            ModSettingValue::None => Box::new(empty()),
             ModSettingValue::Bool(v) => Box::new(v.shrink().map(ModSettingValue::Bool)),
             ModSettingValue::Number(v) => Box::new(v.shrink().map(ModSettingValue::Number)),
             ModSettingValue::String(v) => Box::new(v.shrink().map(ModSettingValue::String)),
