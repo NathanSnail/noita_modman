@@ -358,10 +358,6 @@ impl ModPack {
 }
 
 impl ModSetting {
-    pub fn new(key: String, values: ModSettingPair) -> Self {
-        Self { key, values }
-    }
-
     pub fn load<R: Read>(mut reader: R) -> anyhow::Result<Self> {
         let key = reader.read_str::<u32>(Big).context("Reading key")?;
         let setting_current_type = reader
