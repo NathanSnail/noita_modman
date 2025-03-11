@@ -578,11 +578,8 @@ mod test {
         let s = "\u{fff4}\u{2000}\u{fff4}⁀ࠀ\0\0\0\0".as_bytes();
         let mut buffer = ByteVec(Vec::new());
         compress_file(&mut buffer, s).expect("Saving must work");
-        dbg!(&buffer);
         let len = buffer.0.len();
-        dbg!(s);
         let decompressed = decompress_file(&mut buffer, len).expect("Loading must work");
-        dbg!(&decompressed);
         assert_eq!(s, decompressed);
     }
 }
