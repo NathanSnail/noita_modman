@@ -49,6 +49,7 @@ pub struct ModSettings(HashMap<String, ModSettingPair>);
 
 #[derive(Clone, Debug)]
 pub struct ModPack {
+    file_name: String,
     name: String,
     mods: Vec<String>,
     settings: ModSettings,
@@ -156,7 +157,7 @@ impl ModSettingValue {
 }
 
 impl ModPack {
-    fn load_v0<R: Read>(mut reader: R) -> anyhow::Result<ModPack> {
+    fn load_v0<R: Read>(mut reader: R, file_name: String) -> anyhow::Result<ModPack> {
         let name = reader
             .read_str::<usize>(Little)
             .context("Reading modpack name")?;
@@ -187,6 +188,7 @@ impl ModPack {
             }
 
             Ok::<ModPack, Error>(ModPack {
+                file_name,
                 name,
                 mods,
                 settings: ModSettings(settings),
@@ -233,12 +235,12 @@ impl ModPack {
         }
     }
 
-    pub fn load<R: Read>(mut reader: R) -> anyhow::Result<ModPack> {
+    pub fn load<R: Read>(mut reader: R, file_name: String) -> anyhow::Result<ModPack> {
         let version = reader
             .read_le::<usize>()
             .context("Reading modpack schema version")?;
         match version {
-            0 => Self::load_v0(reader),
+            0 => Self::load_v0(reader, file_name),
             1.. => bail!("Attempted to load future modpack schema (v{version})"),
         }
     }
@@ -333,8 +335,9 @@ impl ModPack {
                         .on_hover_text(err);
                 }
             });
-            // on_hover_ui is lazy so we can't set the error in it
+
             ui.label(&self.name).on_hover_ui(|ui| {
+                ui.label(format!("({})\n", &self.file_name));
                 for nmod in self.mods.iter() {
                     ui.label(nmod);
                 }
@@ -344,12 +347,22 @@ impl ModPack {
         })
     }
 
-    pub fn new(name: &str, mods: &[String], settings: &ModSettings) -> ModPack {
+    pub fn new(
+        name: String,
+        file_name: String,
+        mods: &[String],
+        settings: &ModSettings,
+    ) -> ModPack {
         ModPack {
-            name: name.to_owned(),
+            file_name,
+            name,
             mods: mods.to_vec(),
             settings: settings.clone(),
         }
+    }
+
+    pub fn file_name(&self) -> &str {
+        &self.file_name
     }
 
     pub fn name(&self) -> &str {
