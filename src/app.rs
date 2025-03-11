@@ -102,7 +102,8 @@ impl App<'_, '_> {
         });
         if ui.button("Export as modpack").clicked() {
             let pack = ModPack::new(
-                &self.mod_pack.name,
+                self.mod_pack.name.clone(),
+                self.mod_pack.name.clone(),
                 &self
                     .mod_list
                     .mods
@@ -127,7 +128,7 @@ impl App<'_, '_> {
                 .mod_pack
                 .modpacks
                 .iter_mut()
-                .find(|e| e.name() == pack.name())
+                .find(|e| e.file_name() == pack.file_name())
             {
                 *found = pack;
             } else {
@@ -232,19 +233,19 @@ impl App<'_, '_> {
         let mut packs = Vec::new();
         for file in fs::read_dir(dir).context(format!("Reading modpack dir {}", dir.display()))? {
             let file = file.context(format!("Accessing file for modpack dir {}", dir.display()))?;
-            if file
+            let file_name = file
                 .file_name()
                 .to_str()
                 .context(format!("Getting file name {}", file.path().display()))?
-                .starts_with('.')
-            {
+                .to_string();
+            if file_name.starts_with('.') {
                 continue;
             }
             let reader = BufReader::new(
                 File::open(file.path())
                     .context(format!("Opening modpack file {}", file.path().display()))?,
             );
-            let pack = ModPack::load(reader).context(format!(
+            let pack = ModPack::load(reader, file_name).context(format!(
                 "Loading modpack from file {}",
                 file.path().display()
             ))?;
