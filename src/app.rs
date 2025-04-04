@@ -167,6 +167,14 @@ impl App<'_, '_> {
         Ok(())
     }
 
+    fn render_mod_settings_panel(&mut self, ui: &mut Ui) {
+        egui::ScrollArea::vertical()
+            .auto_shrink(false)
+            .show(ui, |ui| {
+                self.mod_list.mod_settings.render(ui);
+            });
+    }
+
     fn render_mods_panel(&mut self, ui: &mut Ui) {
         if self.row_rect == None {
             if let Some(nmod) = self.mod_list.mods.get_mut(0) {
@@ -722,6 +730,8 @@ impl eframe::App for App<'_, '_> {
         self.popups.retain(|popup| popup.show(&ctx));
 
         egui::SidePanel::right(Id::new("Right Panel")).show(ctx, |ui| {
+            self.render_mod_settings_panel(ui);
+
             let res = self.render_modpack_panel(ui);
             self.result_popup(res)
         });

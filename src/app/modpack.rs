@@ -38,6 +38,19 @@ pub struct ModSettingPair {
     next: ModSettingValue,
 }
 
+impl ModSettingPair {
+    fn render(&self, ui: &mut Ui) {
+        ui.horizontal(|ui| {
+            ui.label("Current");
+            self.current.render(ui)
+        });
+        ui.horizontal(|ui| {
+            ui.label("Next");
+            self.next.render(ui)
+        });
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModSetting {
     key: String,
@@ -46,6 +59,15 @@ pub struct ModSetting {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ModSettings(HashMap<String, ModSettingPair>);
+
+impl ModSettings {
+    pub fn render(&self, ui: &mut Ui) {
+        for (key, setting) in self.0.iter() {
+            ui.label(key);
+            setting.render(ui);
+        }
+    }
+}
 
 #[derive(Clone, Debug)]
 pub struct ModPack {
@@ -153,6 +175,15 @@ impl ModSettingValue {
                 .write_str::<u32>(v, Big)
                 .context(format!("Writing string {v}")),
         }
+    }
+
+    fn render(&self, ui: &mut Ui) {
+        match self {
+            ModSettingValue::None => ui.code("None()"),
+            ModSettingValue::Bool(val) => ui.code(format!("Bool({val})")),
+            ModSettingValue::Number(val) => ui.code(format!("Number({val})")),
+            ModSettingValue::String(val) => ui.code(format!("String({val})")),
+        };
     }
 }
 
