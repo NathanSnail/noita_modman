@@ -63,8 +63,9 @@ pub struct ModSettings(HashMap<String, ModSettingPair>);
 impl ModSettings {
     pub fn render(&self, ui: &mut Ui) {
         for (key, setting) in self.0.iter() {
-            ui.label(key);
-            setting.render(ui);
+            ui.label(key).on_hover_ui(|ui| {
+                setting.render(ui);
+            });
         }
     }
 }
@@ -182,7 +183,7 @@ impl ModSettingValue {
             ModSettingValue::None => ui.code("None()"),
             ModSettingValue::Bool(val) => ui.code(format!("Bool({val})")),
             ModSettingValue::Number(val) => ui.code(format!("Number({val})")),
-            ModSettingValue::String(val) => ui.code(format!("String({val})")),
+            ModSettingValue::String(val) => ui.code(format!("String(\"{val}\")")),
         };
     }
 }
