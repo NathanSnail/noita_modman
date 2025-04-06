@@ -11,6 +11,10 @@ egui = "0.31.0"
 egui_extras = "0.31.0"
 fastlz = "0.1.0"
 git2 = "0.20.0"
+pprof =  { version = "0.14", features = ["flamegraph"], optional = true }
 quickcheck = "1.0.3"
 quickcheck_macros = "1.0.0"
 xmltree = "0.11.0"
+
+[features]
+profiler = ["dep:pprof"]

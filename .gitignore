@@ -1,3 +1,4 @@
 target/
 modpacks/*
 !modpacks/.gitkeep
+flame_graph.svg
