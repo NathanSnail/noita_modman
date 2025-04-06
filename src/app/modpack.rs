@@ -1,5 +1,6 @@
 use quickcheck::{Arbitrary, Gen};
 use std::{
+    borrow::Borrow,
     cmp::max,
     collections::{HashMap, HashSet},
     io::{Read, Write},
@@ -17,7 +18,7 @@ use crate::{
         Endianness::{Big, Little},
     },
     icons::{UNSAFE, YELLOW},
-    r#mod::ModKind,
+    r#mod::{self, ModKind},
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -74,6 +75,23 @@ enum ModSettingsNode {
 
 impl ModSettingsGroup {
     pub fn render(&mut self, ui: &mut Ui) {
+        const INCLUDE_INFO: &'static str = "Included settings are exported with the modpack\nWhen a modpack is imported only exported settings will be applied";
+        ui.horizontal(|ui| {
+            if ui
+                .button("Include All")
+                .on_hover_text("Include all children of this node\n".to_string() + INCLUDE_INFO)
+                .clicked()
+            {
+                self.set_all(true);
+            }
+            if ui
+                .button("Exclude All")
+                .on_hover_text("Exclude all children of this node\n".to_string() + INCLUDE_INFO)
+                .clicked()
+            {
+                self.set_all(false);
+            }
+        });
         for (key, setting) in self.0.iter_mut() {
             match setting {
                 ModSettingsNode::Group(mod_settings_group) => {
@@ -140,6 +158,15 @@ impl ModSettingsGroup {
                 }
             }
             None => self,
+        }
+    }
+
+    pub fn set_all(&mut self, include: bool) {
+        for (_, setting) in self.0.iter_mut() {
+            match setting {
+                ModSettingsNode::Group(mod_settings_group) => mod_settings_group.set_all(include),
+                ModSettingsNode::Setting(togglable_setting) => togglable_setting.include = include,
+            }
         }
     }
 }
