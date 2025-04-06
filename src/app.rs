@@ -7,8 +7,8 @@ use std::{
 
 use anyhow::{anyhow, bail, Context};
 use egui::{
-    emath, vec2, Button, Color32, DragAndDrop, FontId, Grid, Id, InnerResponse, LayerId, Order,
-    Rangef, Rect, Sense, Ui, UiBuilder, Window,
+    emath, vec2, Button, Color32, DragAndDrop, FontFamily, FontId, Grid, Id, InnerResponse,
+    LayerId, Order, Rangef, Rect, Sense, TextStyle, Ui, UiBuilder, Window,
 };
 use modpack::{ModPack, ModSettings};
 use xmltree::{Element, XMLNode};
@@ -18,6 +18,8 @@ use crate::r#mod::{
 };
 
 mod modpack;
+
+pub const SCALE: f32 = 1.6;
 
 #[derive(Copy, Clone, Debug)]
 struct DNDPayload(usize);
@@ -679,9 +681,28 @@ impl App<'_, '_> {
                 egui_extras::install_image_loaders(&cc.egui_ctx);
                 cc.egui_ctx.style_mut(|style| {
                     style.text_styles.insert(
-                        egui::TextStyle::Body,
-                        FontId::new(20.0, egui::FontFamily::Proportional),
+                        TextStyle::Small,
+                        FontId::new(9.0 * SCALE, FontFamily::Proportional),
                     );
+                    style.text_styles.insert(
+                        TextStyle::Body,
+                        FontId::new(12.5 * SCALE, FontFamily::Proportional),
+                    );
+                    style.text_styles.insert(
+                        TextStyle::Button,
+                        FontId::new(12.5 * SCALE, FontFamily::Proportional),
+                    );
+                    style.text_styles.insert(
+                        TextStyle::Heading,
+                        FontId::new(18.0 * SCALE, FontFamily::Proportional),
+                    );
+                    style.text_styles.insert(
+                        TextStyle::Monospace,
+                        FontId::new(12.0 * SCALE, FontFamily::Monospace),
+                    );
+                    style.spacing.interact_size *= SCALE;
+                    style.spacing.icon_width *= SCALE;
+                    style.spacing.icon_spacing *= SCALE;
                 });
                 Ok(Box::new(self))
             }),

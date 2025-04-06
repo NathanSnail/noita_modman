@@ -1,7 +1,7 @@
 use conditional::Condition;
 use egui::{Rect, RichText};
 pub mod conditional;
-use crate::app::UiSizedExt;
+use crate::app::{UiSizedExt, SCALE};
 use crate::icons::{GAMEMODE, NORMAL, STEAM, TRANSLATION, UNSAFE, YELLOW};
 
 #[derive(Copy, Clone, Debug)]
@@ -79,7 +79,7 @@ impl Mod {
     // returns the rect of the text and it's hover text for dragging
     pub fn render(&mut self, ui: &mut egui::Ui, errored: bool) -> ModRenderResponse {
         let full = ui.horizontal(|ui| {
-            ui.fixed_size_group(28.0, |ui| match &mut self.kind {
+            ui.fixed_size_group(28.0 * SCALE, |ui| match &mut self.kind {
                 ModKind::Normal(normal_mod) => {
                     ui.scope(|ui| {
                         if errored {
@@ -92,7 +92,7 @@ impl Mod {
                 _ => {}
             });
 
-            ui.fixed_size_group(30.0, |ui| match &self.source {
+            ui.fixed_size_group(20.0 * SCALE, |ui| match &self.source {
                 ModSource::Git(git_mod) => {
                     let remote_url = git_mod.remote.clone();
                     use egui::special_emojis::GIT;
@@ -127,7 +127,7 @@ impl Mod {
                 _ => {}
             });
 
-            ui.fixed_size_group(60.0, |ui| {
+            ui.fixed_size_group(41.0 * SCALE, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(
                         match &self.kind {
