@@ -1,18 +1,25 @@
 use egui::{
     collapsing_header::{paint_default_icon, CollapsingState},
-    epaint, pos2, vec2, CollapsingResponse, Id, NumExt, Rect, Response, Sense, StrokeKind, Ui,
-    WidgetInfo, WidgetType,
+    epaint, pos2, vec2, CollapsingResponse, Id, InnerResponse, NumExt, Rect, Response, Sense,
+    StrokeKind, Ui, WidgetInfo, WidgetType,
 };
 
-struct Prepared {
+struct Prepared<T> {
     header_response: Response,
     state: CollapsingState,
     openness: f32,
+    inner: T,
+}
+
+/// inner represents the header
+pub struct InnerCollapsingResponse<T, R> {
+    pub inner: T,
+    pub response: CollapsingResponse<R>,
 }
 
 /// Based off [`egui::containers::collapsing_header`]
-pub struct CollapsingUi {
-    render: Box<dyn FnMut(&mut Ui) -> Response>,
+pub struct CollapsingUi<T> {
+    render: Box<dyn FnMut(&mut Ui) -> InnerResponse<T>>,
     default_open: bool,
     open: Option<bool>,
     id_salt: Id,
@@ -21,9 +28,8 @@ pub struct CollapsingUi {
     show_background: bool,
 }
 
-impl CollapsingUi {
-    /// render_fn must always take the same amount of space
-    pub fn new(id_salt: Id, render_fn: Box<dyn FnMut(&mut Ui) -> Response>) -> Self {
+impl<T> CollapsingUi<T> {
+    pub fn new(id_salt: Id, render_fn: Box<dyn FnMut(&mut Ui) -> InnerResponse<T>>) -> Self {
         Self {
             render: render_fn,
             default_open: false,
@@ -35,7 +41,7 @@ impl CollapsingUi {
         }
     }
 
-    fn begin(self, ui: &mut Ui) -> Prepared {
+    fn begin(self, ui: &mut Ui) -> Prepared<T> {
         assert!(
             ui.layout().main_dir().is_vertical(),
             "Horizontal collapsing is unimplemented"
@@ -68,7 +74,8 @@ impl CollapsingUi {
             let openness = state.openness(ui.ctx());
 
             paint_default_icon(ui, openness, &icon_response);
-            let rect = render(ui).rect;
+            let inner_response = render(ui);
+            let rect = inner_response.response.rect;
 
             let mut header_response = ui.interact(rect, id, Sense::click());
 
@@ -114,6 +121,7 @@ impl CollapsingUi {
                 header_response,
                 state,
                 openness,
+                inner: inner_response.inner,
             }
         })
         .inner
@@ -123,7 +131,7 @@ impl CollapsingUi {
         self,
         ui: &mut Ui,
         add_body: impl FnOnce(&mut Ui) -> R,
-    ) -> CollapsingResponse<R> {
+    ) -> InnerCollapsingResponse<T, R> {
         self.show_dyn(ui, Box::new(add_body), true)
     }
 
@@ -132,7 +140,7 @@ impl CollapsingUi {
         ui: &mut Ui,
         add_body: Box<dyn FnOnce(&mut Ui) -> R + 'c>,
         indented: bool,
-    ) -> CollapsingResponse<R> {
+    ) -> InnerCollapsingResponse<T, R> {
         // Make sure body is bellow header,
         // and make sure it is one unit (necessary for putting a [`CollapsingHeader`] in a grid).
         ui.vertical(|ui| {
@@ -140,6 +148,7 @@ impl CollapsingUi {
                 header_response,
                 mut state,
                 openness,
+                inner,
             } = self.begin(ui); // show the header
 
             let ret_response = if indented {
@@ -148,20 +157,23 @@ impl CollapsingUi {
                 state.show_body_unindented(ui, add_body)
             };
 
-            if let Some(ret_response) = ret_response {
-                CollapsingResponse {
-                    header_response,
-                    body_response: Some(ret_response.response),
-                    body_returned: Some(ret_response.inner),
-                    openness,
-                }
-            } else {
-                CollapsingResponse {
-                    header_response,
-                    body_response: None,
-                    body_returned: None,
-                    openness,
-                }
+            InnerCollapsingResponse {
+                inner,
+                response: if let Some(ret_response) = ret_response {
+                    CollapsingResponse {
+                        header_response,
+                        body_response: Some(ret_response.response),
+                        body_returned: Some(ret_response.inner),
+                        openness,
+                    }
+                } else {
+                    CollapsingResponse {
+                        header_response,
+                        body_response: None,
+                        body_returned: None,
+                        openness,
+                    }
+                },
             }
         })
         .inner
