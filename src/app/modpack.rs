@@ -90,6 +90,16 @@ impl ModSettingsGroup {
         }
     }
 
+    pub fn sort(&mut self) {
+        for child in self.0.iter_mut() {
+            match &mut child.1 {
+                ModSettingsNode::Group(mod_settings_group) => mod_settings_group.sort(),
+                ModSettingsNode::Setting(_) => (),
+            }
+        }
+        self.0.sort_by_key(|e| e.0.clone());
+    }
+
     pub fn traverse<'a, 'b, I: Iterator<Item = &'a str>>(
         &'b mut self,
         mut path: I,
@@ -586,6 +596,7 @@ impl ModSettings {
                 }),
             ))
         }
+        tree.sort();
         tree
     }
 }
