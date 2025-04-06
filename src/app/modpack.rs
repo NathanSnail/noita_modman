@@ -58,7 +58,7 @@ pub struct ModSetting {
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
-struct ModSettingGroup(HashMap<String, ModSettingPair>);
+struct ModSettingGroup(Vec<(String, ModSettingPair)>);
 
 impl ModSettingGroup {
     pub fn render(&self, ui: &mut Ui) {
@@ -73,7 +73,7 @@ impl ModSettingGroup {
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct ModSettings {
     values: HashMap<String, ModSettingPair>,
-    state: HashMap<String, ModSettingGroup>,
+    state: Vec<(String, ModSettingGroup)>,
 }
 
 #[derive(Clone, Debug)]
@@ -511,7 +511,7 @@ impl ModSettings {
     }
 
     fn compute_state(&mut self) {
-        let mut groups = HashMap::new();
+        let mut groups: HashMap<String, ModSettingGroup> = HashMap::new();
         for (key, value) in self.values.iter() {
             let mut parts = key.split('.');
             let prefix = parts.nth(0).unwrap();
@@ -522,9 +522,16 @@ impl ModSettings {
                 groups.insert(prefix.to_string(), Default::default());
                 groups.get_mut(prefix).unwrap()
             };
-            group.0.insert(suffix, value.clone());
+            group.0.push((suffix, value.clone()));
         }
-        self.state = groups;
+        for group in groups.iter_mut() {
+            group.1 .0.sort_by_key(|e| e.0.clone());
+        }
+        self.state = groups
+            .iter()
+            .map(|e| (e.0.clone(), e.1.clone()))
+            .collect::<Vec<_>>();
+        self.state.sort_by_key(|e| e.0.clone());
     }
 }
 
