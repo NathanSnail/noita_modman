@@ -85,23 +85,6 @@ impl ModSettingsGroup {
     }
 
     pub fn render(&mut self, ui: &mut Ui) {
-        const INCLUDE_INFO: &'static str = "Included settings are exported with the modpack\nWhen a modpack is imported only exported settings will be applied";
-        ui.horizontal(|ui| {
-            if ui
-                .button("Include All")
-                .on_hover_text("Include all children of this node\n".to_string() + INCLUDE_INFO)
-                .clicked()
-            {
-                self.include_all(true);
-            }
-            if ui
-                .button("Exclude All")
-                .on_hover_text("Exclude all children of this node\n".to_string() + INCLUDE_INFO)
-                .clicked()
-            {
-                self.include_all(false);
-            }
-        });
         for (key, setting) in self.0.iter_mut() {
             match setting {
                 ModSettingsNode::Group(mod_settings_group) => {
@@ -113,12 +96,25 @@ impl ModSettingsGroup {
                             Box::new(move |ui| {
                                 ui.scope(|ui| {
                                     let mut checked = captured_checked;
-                                    ui.checkbox(&mut checked, &captured_key);
-                                    if checked != captured_checked {
-                                        Some(checked)
-                                    } else {
-                                        None
-                                    }
+                                    let rect = ui
+                                        .horizontal(|ui| {
+                                            ui.checkbox(&mut checked, "").on_hover_text(
+                                                match captured_checked {
+                                                    true => "Exclude all children of this node",
+                                                    false => "Include all children of this node",
+                                                },
+                                            );
+                                            ui.label(&captured_key).rect
+                                        })
+                                        .inner;
+                                    (
+                                        if checked != captured_checked {
+                                            Some(checked)
+                                        } else {
+                                            None
+                                        },
+                                        rect,
+                                    )
                                 })
                             }),
                         )
