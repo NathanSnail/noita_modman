@@ -53,11 +53,17 @@ impl CollapsingUi {
         let id = ui.make_persistent_id(id_salt);
         let button_padding = ui.spacing().button_padding;
 
-        let available = ui.available_rect_before_wrap();
-        let text_pos = available.min + vec2(ui.spacing().indent, 0.0);
-
         ui.horizontal(|ui| {
-            let icon_response = ui.scope(|_| {}).response;
+            let icon_minimal = ui.allocate_space(button_padding);
+
+            let (mut icon_rect, _) = ui.spacing().icon_rectangles(icon_minimal.1);
+
+            icon_rect.set_center(pos2(
+                icon_rect.left() + ui.spacing().indent / 2.0,
+                icon_rect.center().y,
+            ));
+
+            let icon_response = ui.interact(icon_rect, icon_minimal.0, Sense::click());
             let mut state = CollapsingState::load_with_default_open(ui.ctx(), id, default_open);
             let openness = state.openness(ui.ctx());
 
