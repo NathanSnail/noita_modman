@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Context, Error};
-use egui::{InnerResponse, Rect, RichText, Ui};
+use egui::{CollapsingHeader, InnerResponse, Rect, RichText, Ui};
 use fastlz;
 
 use crate::{
@@ -57,17 +57,22 @@ pub struct ModSetting {
     values: ModSettingPair,
 }
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct ModSettings(HashMap<String, ModSettingPair>);
+#[derive(Clone, Debug, PartialEq, Default)]
+struct ModSettingGroup(HashMap<String, ModSettingPair>);
 
-impl ModSettings {
+impl ModSettingGroup {
     pub fn render(&self, ui: &mut Ui) {
         for (key, setting) in self.0.iter() {
-            ui.label(key).on_hover_ui(|ui| {
-                setting.render(ui);
-            });
+            ui.label(key);
+            setting.render(ui);
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq, Default)]
+pub struct ModSettings {
+    values: HashMap<String, ModSettingPair>,
+    state: HashMap<String, ModSettingGroup>,
 }
 
 #[derive(Clone, Debug)]
@@ -223,7 +228,10 @@ impl ModPack {
                 file_name,
                 name,
                 mods,
-                settings: ModSettings(settings),
+                settings: ModSettings {
+                    values: settings,
+                    ..Default::default()
+                },
             })
         })()
         .context(format!("Loading pack {err_name}"))
@@ -259,10 +267,10 @@ impl ModPack {
             mod_list_config.mods[idx] = nmod.0;
         }
 
-        for (key, values) in self.settings.0.iter() {
+        for (key, values) in self.settings.values.iter() {
             mod_list_config
                 .mod_settings
-                .0
+                .values
                 .insert(key.clone(), values.clone());
         }
     }
@@ -299,10 +307,10 @@ impl ModPack {
             }
 
             writer
-                .write_le::<usize>(self.settings.0.len())
+                .write_le::<usize>(self.settings.values.len())
                 .context("Writing modpack number of settings")?;
 
-            for (key, values) in &self.settings.0 {
+            for (key, values) in &self.settings.values {
                 ModSetting {
                     key: key.clone(),
                     values: values.clone(),
@@ -452,9 +460,6 @@ impl ModSetting {
 }
 
 impl ModSettings {
-    pub fn empty() -> ModSettings {
-        ModSettings(HashMap::new())
-    }
     // basically a port of dexters https://github.com/dextercd/NoitaSettings/blob/main/settings_main.cpp
     pub fn load<R: Read>(reader: R, file_size: usize) -> anyhow::Result<ModSettings> {
         let mut settings = HashMap::new();
@@ -474,14 +479,19 @@ impl ModSettings {
         if num_entries != expected_num_entries {
             bail!("Expected {expected_num_entries} but there were {num_entries}");
         }
-        Ok(ModSettings(settings))
+        let mut settings = ModSettings {
+            values: settings,
+            ..Default::default()
+        };
+        settings.compute_state();
+        Ok(settings)
     }
 
     pub fn save<W: Write>(&self, writer: W) -> anyhow::Result<()> {
         let mut buf = ByteVec(Vec::new());
-        buf.write_be::<u64>(self.0.len() as u64)
+        buf.write_be::<u64>(self.values.len() as u64)
             .context("Writing number of settings")?;
-        for (key, values) in self.0.iter() {
+        for (key, values) in self.values.iter() {
             let setting = ModSetting {
                 key: key.clone(),
                 values: values.clone(),
@@ -489,6 +499,31 @@ impl ModSettings {
             setting.save(&mut buf)?; // TODO: remove clones
         }
         compress_file(writer, &buf.0).context("Compressing to file")
+    }
+
+    pub fn render(&self, ui: &mut Ui) {
+        for (prefix, group) in self.state.iter() {
+            CollapsingHeader::new(prefix).show(ui, |ui| {
+                group.render(ui);
+            });
+        }
+    }
+
+    fn compute_state(&mut self) {
+        let mut groups = HashMap::new();
+        for (key, value) in self.values.iter() {
+            let mut parts = key.split('.');
+            let prefix = parts.nth(0).unwrap();
+            let suffix = parts.fold("".to_string(), |acc, e| acc + "." + e);
+            let group: &mut ModSettingGroup = if let Some(existing_group) = groups.get_mut(prefix) {
+                existing_group
+            } else {
+                groups.insert(prefix.to_string(), Default::default());
+                groups.get_mut(prefix).unwrap()
+            };
+            group.0.insert(suffix, value.clone());
+        }
+        self.state = groups;
     }
 }
 
@@ -545,28 +580,28 @@ impl Arbitrary for ModSettingPair {
             zip(self.next.shrink(), self.current.shrink()) // not ideal but i cannot figure out how to do the proper nested approach
                 .map(|(next, current)| Self { next, current }),
         )
-        // Box::new(self.current.shrink().flat_map(move |current| {
-        //     self.next.shrink().map(move |next| Self {
-        //         current: current.clone(),
-        //         next: next.clone(),
-        //     })
-        // }))
     }
 }
 
 impl Arbitrary for ModSettings {
     fn arbitrary(g: &mut Gen) -> Self {
-        let mut settings = Self(HashMap::new());
+        let mut settings = Self {
+            values: HashMap::new(),
+            ..Default::default()
+        };
         for _ in 0..(u32::arbitrary(g) % 100) {
             settings
-                .0
+                .values
                 .insert(String::arbitrary(g), ModSettingPair::arbitrary(g));
         }
         settings
     }
 
     fn shrink(&self) -> Box<dyn Iterator<Item = Self>> {
-        Box::new(self.0.shrink().map(Self))
+        Box::new(self.values.shrink().map(|hash_map| Self {
+            values: hash_map,
+            ..Default::default()
+        }))
     }
 }
 
@@ -611,9 +646,12 @@ mod test {
             },
         );
         let mut buffer = ByteVec(Vec::new());
-        ModSettings(map)
-            .save(&mut buffer)
-            .expect("Saving must work");
+        ModSettings {
+            values: map,
+            ..Default::default()
+        }
+        .save(&mut buffer)
+        .expect("Saving must work");
         let len = buffer.0.len();
         ModSettings::load(&mut buffer, len).expect("Loading must work");
     }
