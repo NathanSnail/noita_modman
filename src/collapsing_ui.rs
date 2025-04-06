@@ -19,7 +19,7 @@ pub struct InnerCollapsingResponse<T, R> {
 
 /// Based off [`egui::containers::collapsing_header`]
 pub struct CollapsingUi<T> {
-    render: Box<dyn FnMut(&mut Ui) -> InnerResponse<T>>,
+    render: Box<dyn FnMut(&mut Ui) -> InnerResponse<(T, Rect)>>,
     default_open: bool,
     open: Option<bool>,
     id_salt: Id,
@@ -29,7 +29,10 @@ pub struct CollapsingUi<T> {
 }
 
 impl<T> CollapsingUi<T> {
-    pub fn new(id_salt: Id, render_fn: Box<dyn FnMut(&mut Ui) -> InnerResponse<T>>) -> Self {
+    pub fn new(
+        id_salt: Id,
+        render_fn: Box<dyn FnMut(&mut Ui) -> InnerResponse<(T, Rect)>>,
+    ) -> Self {
         Self {
             render: render_fn,
             default_open: false,
@@ -75,7 +78,7 @@ impl<T> CollapsingUi<T> {
 
             paint_default_icon(ui, openness, &icon_response);
             let inner_response = render(ui);
-            let rect = inner_response.response.rect;
+            let rect = inner_response.inner.1;
 
             let mut header_response = ui.interact(rect, id, Sense::click());
 
@@ -121,7 +124,7 @@ impl<T> CollapsingUi<T> {
                 header_response,
                 state,
                 openness,
-                inner: inner_response.inner,
+                inner: inner_response.inner.0,
             }
         })
         .inner
