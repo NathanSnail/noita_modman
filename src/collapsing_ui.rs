@@ -1,0 +1,163 @@
+use egui::{
+    collapsing_header::{paint_default_icon, CollapsingState},
+    epaint, pos2, vec2, CollapsingResponse, Id, NumExt, Rect, Response, Sense, StrokeKind, Ui,
+    WidgetInfo, WidgetType,
+};
+
+struct Prepared {
+    header_response: Response,
+    state: CollapsingState,
+    openness: f32,
+}
+
+/// Based off [`egui::containers::collapsing_header`]
+pub struct CollapsingUi {
+    render: Box<dyn FnMut(&mut Ui) -> Response>,
+    default_open: bool,
+    open: Option<bool>,
+    id_salt: Id,
+    selectable: bool,
+    selected: bool,
+    show_background: bool,
+}
+
+impl CollapsingUi {
+    /// render_fn must always take the same amount of space
+    pub fn new(id_salt: Id, render_fn: Box<dyn FnMut(&mut Ui) -> Response>) -> Self {
+        Self {
+            render: render_fn,
+            default_open: false,
+            open: None,
+            id_salt,
+            selectable: false,
+            selected: false,
+            show_background: false,
+        }
+    }
+
+    fn begin(self, ui: &mut Ui) -> Prepared {
+        assert!(
+            ui.layout().main_dir().is_vertical(),
+            "Horizontal collapsing is unimplemented"
+        );
+        let Self {
+            mut render,
+            default_open,
+            open,
+            id_salt,
+            selectable,
+            selected,
+            show_background,
+        } = self;
+
+        let id = ui.make_persistent_id(id_salt);
+        let button_padding = ui.spacing().button_padding;
+
+        let available = ui.available_rect_before_wrap();
+        let text_pos = available.min + vec2(ui.spacing().indent, 0.0);
+
+        ui.horizontal(|ui| {
+            let icon_response = ui.scope(|_| {}).response;
+            let mut state = CollapsingState::load_with_default_open(ui.ctx(), id, default_open);
+            let openness = state.openness(ui.ctx());
+
+            paint_default_icon(ui, openness, &icon_response);
+            let rect = render(ui).rect;
+
+            let mut header_response = ui.interact(rect, id, Sense::click());
+
+            if let Some(open) = open {
+                if open != state.is_open() {
+                    state.toggle(ui);
+                    header_response.mark_changed();
+                }
+            } else if header_response.clicked() {
+                state.toggle(ui);
+                header_response.mark_changed();
+            }
+
+            header_response.widget_info(|| {
+                WidgetInfo::labeled(WidgetType::CollapsingHeader, ui.is_enabled(), "")
+            });
+
+            let visuals = ui.style().interact_selectable(&header_response, selected);
+
+            if ui.visuals().collapsing_header_frame || show_background {
+                ui.painter().add(epaint::RectShape::new(
+                    header_response.rect.expand(visuals.expansion),
+                    visuals.corner_radius,
+                    visuals.weak_bg_fill,
+                    visuals.bg_stroke,
+                    StrokeKind::Inside,
+                ));
+            }
+
+            if selected || selectable && (header_response.hovered() || header_response.has_focus())
+            {
+                let rect = rect.expand(visuals.expansion);
+
+                ui.painter().rect(
+                    rect,
+                    visuals.corner_radius,
+                    visuals.bg_fill,
+                    visuals.bg_stroke,
+                    StrokeKind::Inside,
+                );
+            }
+            Prepared {
+                header_response,
+                state,
+                openness,
+            }
+        })
+        .inner
+    }
+
+    pub fn show<R>(
+        self,
+        ui: &mut Ui,
+        add_body: impl FnOnce(&mut Ui) -> R,
+    ) -> CollapsingResponse<R> {
+        self.show_dyn(ui, Box::new(add_body), true)
+    }
+
+    fn show_dyn<'c, R>(
+        self,
+        ui: &mut Ui,
+        add_body: Box<dyn FnOnce(&mut Ui) -> R + 'c>,
+        indented: bool,
+    ) -> CollapsingResponse<R> {
+        // Make sure body is bellow header,
+        // and make sure it is one unit (necessary for putting a [`CollapsingHeader`] in a grid).
+        ui.vertical(|ui| {
+            let Prepared {
+                header_response,
+                mut state,
+                openness,
+            } = self.begin(ui); // show the header
+
+            let ret_response = if indented {
+                state.show_body_indented(&header_response, ui, add_body)
+            } else {
+                state.show_body_unindented(ui, add_body)
+            };
+
+            if let Some(ret_response) = ret_response {
+                CollapsingResponse {
+                    header_response,
+                    body_response: Some(ret_response.response),
+                    body_returned: Some(ret_response.inner),
+                    openness,
+                }
+            } else {
+                CollapsingResponse {
+                    header_response,
+                    body_response: None,
+                    body_returned: None,
+                    openness,
+                }
+            }
+        })
+        .inner
+    }
+}
