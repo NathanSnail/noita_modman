@@ -63,7 +63,7 @@ impl CollapsingUi {
                 icon_rect.center().y,
             ));
 
-            let icon_response = ui.interact(icon_rect, icon_minimal.0, Sense::click());
+            let icon_response = ui.allocate_rect(icon_rect, Sense::click());
             let mut state = CollapsingState::load_with_default_open(ui.ctx(), id, default_open);
             let openness = state.openness(ui.ctx());
 
