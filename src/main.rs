@@ -1,4 +1,4 @@
-use std::path::Path;
+use std::{marker::PhantomData, path::Path};
 
 #[cfg(test)]
 extern crate quickcheck;
@@ -12,7 +12,7 @@ mod ext;
 mod icons;
 mod r#mod;
 use anyhow::Context;
-use app::App;
+use app::{App, ProfilerInfo};
 use r#mod::Mod;
 
 fn main() -> anyhow::Result<()> {
@@ -22,12 +22,25 @@ fn main() -> anyhow::Result<()> {
     let mods_dir = Path::new("/home/nathan/.local/share/Steam/steamapps/common/Noita/mods");
     let workshop_dir =
         Path::new("/home/nathan/.local/share/Steam/steamapps/workshop/content/881100");
-
+    #[cfg(feature = "profiler")]
+    let profiler = ProfilerInfo {
+        frame_counter: 0,
+        profiler: pprof::ProfilerGuardBuilder::default()
+            .frequency(1000)
+            .blocklist(&["libc", "libgcc", "pthread", "vdso"])
+            .build()
+            .unwrap(),
+    };
+    #[cfg(not(feature = "profiler"))]
+    let profiler = ProfilerInfo {
+        profiler: PhantomData,
+    };
     let app = App::new(
         &mod_config,
         Some(workshop_dir),
         Some(mods_dir),
         mod_settings,
+        profiler,
     )
     .context("Creating app")?;
 

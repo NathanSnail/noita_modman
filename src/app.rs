@@ -2,6 +2,7 @@ use std::{
     collections::{HashMap, HashSet},
     fs::{self, File},
     io::{BufReader, BufWriter, Read, Write},
+    marker::PhantomData,
     path::Path,
 };
 
@@ -11,6 +12,7 @@ use egui::{
     LayerId, Order, Rangef, Rect, Sense, TextStyle, Ui, UiBuilder, Window,
 };
 use modpack::{ModPack, ModSettings};
+
 use xmltree::{Element, XMLNode};
 
 use crate::r#mod::{
@@ -57,7 +59,7 @@ struct ModPackConfig {
     installed_mods: HashSet<String>,
 }
 
-pub struct App<'a, 'b> {
+pub struct App<'a, 'b, 'c> {
     list_config: ModListConfig,
     pack_config: ModPackConfig,
 
@@ -69,6 +71,20 @@ pub struct App<'a, 'b> {
     global_id: usize,
     row_rect: Option<Rect>,
     init_errored: bool,
+
+    #[allow(dead_code)]
+    profiler: ProfilerInfo<'c>,
+}
+
+#[cfg(feature = "profiler")]
+pub struct ProfilerInfo<'a> {
+    pub frame_counter: u64,
+    pub profiler: pprof::ProfilerGuard<'a>,
+}
+
+#[cfg(not(feature = "profiler"))]
+pub struct ProfilerInfo<'a> {
+    pub profiler: PhantomData<&'a ()>,
 }
 
 #[derive(Clone, Debug)]
@@ -78,7 +94,7 @@ pub struct ModConfigItem {
     pub enabled: bool,
 }
 
-impl App<'_, '_> {
+impl<'d, 'e, 'f> App<'d, 'e, 'f> {
     fn render_modpack_panel(&mut self, ui: &mut Ui) -> anyhow::Result<()> {
         if self.pack_config.row_rect == None {
             if let Some(pack) = self.pack_config.modpacks.get_mut(0) {
@@ -635,13 +651,14 @@ impl App<'_, '_> {
         Ok(())
     }
 
-    pub fn new<'a, 'b>(
-        mod_config: &'a Path,
-        workshop_dir: Option<&'a Path>,
-        mods_dir: Option<&'a Path>,
-        mod_settings: &'a Path,
-    ) -> anyhow::Result<App<'a, 'b>> {
-        Ok(App {
+    pub fn new(
+        mod_config: &'d Path,
+        workshop_dir: Option<&'d Path>,
+        mods_dir: Option<&'d Path>,
+        mod_settings: &'d Path,
+        profiler: ProfilerInfo<'f>,
+    ) -> anyhow::Result<App<'d, 'e, 'f>> {
+        Ok(Self {
             mod_config,
             list_config: ModListConfig {
                 search: "".to_owned(),
@@ -661,6 +678,7 @@ impl App<'_, '_> {
                 installed_mods: HashSet::new(),
             },
             init_errored: false,
+            profiler,
         })
     }
 
@@ -752,8 +770,19 @@ impl UiSizedExt for egui::Ui {
     }
 }
 
-impl eframe::App for App<'_, '_> {
+impl eframe::App for App<'_, '_, '_> {
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+        #[cfg(feature = "profiler")]
+        {
+            self.profiler.frame_counter += 1;
+            if self.profiler.frame_counter % 1000 == 0 {
+                if let Ok(report) = self.profiler.profiler.report().build() {
+                    let file = File::create("flamegraph.svg").unwrap();
+                    report.flamegraph(file).unwrap();
+                };
+            }
+        }
+
         self.popups.retain(|popup| popup.show(&ctx));
 
         egui::SidePanel::right(Id::new("Right Panel")).show(ctx, |ui| {
