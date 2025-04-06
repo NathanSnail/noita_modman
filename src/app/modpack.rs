@@ -63,8 +63,9 @@ struct ModSettingGroup(HashMap<String, ModSettingPair>);
 impl ModSettingGroup {
     pub fn render(&self, ui: &mut Ui) {
         for (key, setting) in self.0.iter() {
-            ui.label(key);
-            setting.render(ui);
+            ui.label(key).on_hover_ui(|ui| {
+                setting.render(ui);
+            });
         }
     }
 }
