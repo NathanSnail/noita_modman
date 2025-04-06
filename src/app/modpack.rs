@@ -57,15 +57,23 @@ pub struct ModSetting {
     values: ModSettingPair,
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct TogglableSetting {
+    pair: ModSettingPair,
+    include: bool,
+}
+
 #[derive(Clone, Debug, PartialEq, Default)]
-struct ModSettingGroup(Vec<(String, ModSettingPair)>);
+struct ModSettingGroup(Vec<(String, TogglableSetting)>);
 
 impl ModSettingGroup {
-    pub fn render(&self, ui: &mut Ui) {
-        for (key, setting) in self.0.iter() {
-            ui.label(key).on_hover_ui(|ui| {
-                setting.render(ui);
+    pub fn render(&mut self, ui: &mut Ui) {
+        for (key, setting) in self.0.iter_mut() {
+            let mut include = setting.include;
+            ui.checkbox(&mut include, key as &str).on_hover_ui(|ui| {
+                setting.pair.render(ui);
             });
+            setting.include = include;
         }
     }
 }
@@ -501,9 +509,9 @@ impl ModSettings {
         compress_file(writer, &buf.0).context("Compressing to file")
     }
 
-    pub fn render(&self, ui: &mut Ui) {
-        for (prefix, group) in self.grouped.iter() {
-            CollapsingHeader::new(prefix).show(ui, |ui| {
+    pub fn render(&mut self, ui: &mut Ui) {
+        for (prefix, group) in self.grouped.iter_mut() {
+            CollapsingHeader::new(prefix as &str).show(ui, |ui| {
                 group.render(ui);
             });
         }
@@ -521,7 +529,13 @@ impl ModSettings {
                 groups.insert(prefix.to_string(), Default::default());
                 groups.get_mut(prefix).unwrap()
             };
-            group.0.push((suffix, value.clone()));
+            group.0.push((
+                suffix,
+                TogglableSetting {
+                    pair: value.clone(),
+                    include: false,
+                },
+            ));
         }
 
         for (_, group) in groups.iter_mut() {
