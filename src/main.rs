@@ -7,6 +7,7 @@ extern crate quickcheck;
 extern crate quickcheck_macros;
 
 mod app;
+mod collapsing_ui;
 mod ext;
 mod icons;
 mod r#mod;

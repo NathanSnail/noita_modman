@@ -8,11 +8,12 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Context, Error};
-use egui::{CollapsingHeader, InnerResponse, Rect, RichText, Ui};
+use egui::{CollapsingHeader, Id, InnerResponse, Rect, Response, RichText, Ui};
 use fastlz;
 
 use crate::{
     app::{ModListConfig, UiSizedExt},
+    collapsing_ui::CollapsingUi,
     ext::{
         ByteReaderExt, ByteVec, ByteWriterExt,
         Endianness::{Big, Little},
@@ -95,7 +96,14 @@ impl ModSettingsGroup {
         for (key, setting) in self.0.iter_mut() {
             match setting {
                 ModSettingsNode::Group(mod_settings_group) => {
-                    CollapsingHeader::new(key as &str).show(ui, |ui| mod_settings_group.render(ui));
+                    ui.push_id(Id::new(key as &str), |ui| {
+                        let captured_key = key.clone();
+                        CollapsingUi::new(
+                            Id::new("Top"),
+                            Box::new(move |ui: &mut Ui| -> Response { ui.label(&captured_key) }),
+                        )
+                        .show(ui, |ui| mod_settings_group.render(ui));
+                    });
                 }
                 ModSettingsNode::Setting(togglable_setting) => {
                     let mut include = togglable_setting.include;
