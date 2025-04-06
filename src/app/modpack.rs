@@ -64,16 +64,72 @@ pub struct TogglableSetting {
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
-struct ModSettingGroup(Vec<(String, TogglableSetting)>);
+struct ModSettingsGroup(Vec<(String, ModSettingsNode)>);
 
-impl ModSettingGroup {
+#[derive(Clone, Debug, PartialEq)]
+enum ModSettingsNode {
+    Group(ModSettingsGroup),
+    Setting(TogglableSetting),
+}
+
+impl ModSettingsGroup {
     pub fn render(&mut self, ui: &mut Ui) {
         for (key, setting) in self.0.iter_mut() {
-            let mut include = setting.include;
-            ui.checkbox(&mut include, key as &str).on_hover_ui(|ui| {
-                setting.pair.render(ui);
-            });
-            setting.include = include;
+            match setting {
+                ModSettingsNode::Group(mod_settings_group) => {
+                    CollapsingHeader::new(key as &str).show(ui, |ui| mod_settings_group.render(ui));
+                }
+                ModSettingsNode::Setting(togglable_setting) => {
+                    let mut include = togglable_setting.include;
+                    ui.checkbox(&mut include, key as &str).on_hover_ui(|ui| {
+                        togglable_setting.pair.render(ui);
+                    });
+                    togglable_setting.include = include;
+                }
+            }
+        }
+    }
+
+    pub fn traverse<'a, 'b, I: Iterator<Item = &'a str>>(
+        &'b mut self,
+        mut path: I,
+    ) -> &'b mut Self {
+        let section = path.next();
+        match section {
+            Some(section) => {
+                let parent = self
+                    .0
+                    .iter_mut()
+                    .enumerate()
+                    .filter(|e| &e.1 .0 == section && matches!(&e.1 .1, ModSettingsNode::Group(_)))
+                    .filter_map(|e| match &mut e.1 .1 {
+                        ModSettingsNode::Group(_) => Some(e.0),
+                        _ => None,
+                    })
+                    .next();
+                match parent {
+                    Some(parent) => match &mut self.0[parent].1 {
+                        ModSettingsNode::Group(mod_settings_group) => {
+                            mod_settings_group.traverse(path)
+                        }
+                        ModSettingsNode::Setting(_) => unreachable!(),
+                    },
+                    None => {
+                        self.0.push((
+                            section.to_string(),
+                            ModSettingsNode::Group(ModSettingsGroup(Vec::new())),
+                        ));
+                        let len = self.0.len();
+                        match &mut self.0[len - 1].1 {
+                            ModSettingsNode::Group(mod_settings_group) => {
+                                mod_settings_group.traverse(path)
+                            }
+                            ModSettingsNode::Setting(_) => unreachable!(),
+                        }
+                    }
+                }
+            }
+            None => self,
         }
     }
 }
@@ -81,7 +137,7 @@ impl ModSettingGroup {
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct ModSettings {
     values: HashMap<String, ModSettingPair>,
-    grouped: Vec<(String, ModSettingGroup)>,
+    grouped: ModSettingsGroup,
 }
 
 #[derive(Clone, Debug)]
@@ -510,43 +566,27 @@ impl ModSettings {
     }
 
     pub fn render(&mut self, ui: &mut Ui) {
-        for (prefix, group) in self.grouped.iter_mut() {
-            CollapsingHeader::new(prefix as &str).show(ui, |ui| {
-                group.render(ui);
-            });
-        }
+        self.grouped.render(ui);
     }
 
-    fn compute_grouped(map: &HashMap<String, ModSettingPair>) -> Vec<(String, ModSettingGroup)> {
-        let mut groups: HashMap<String, ModSettingGroup> = HashMap::new();
-        for (key, value) in map.iter() {
-            let mut parts = key.split('.');
-            let prefix = parts.nth(0).unwrap();
-            let suffix = parts.fold("".to_string(), |acc, e| acc + "." + e);
-            let group: &mut ModSettingGroup = if let Some(existing_group) = groups.get_mut(prefix) {
-                existing_group
-            } else {
-                groups.insert(prefix.to_string(), Default::default());
-                groups.get_mut(prefix).unwrap()
-            };
-            group.0.push((
-                suffix,
-                TogglableSetting {
-                    pair: value.clone(),
+    fn compute_grouped(map: &HashMap<String, ModSettingPair>) -> ModSettingsGroup {
+        let mut tree: ModSettingsGroup = ModSettingsGroup(Default::default());
+        for (key, pair) in map.iter() {
+            let parts = key.split('.').collect::<Vec<_>>();
+            let suffix = *parts
+                .last()
+                .expect("A split string should have at least one part");
+            let prefix = parts[0..parts.len() - 1].iter().map(|e| *e);
+            let node = tree.traverse(prefix);
+            node.0.push((
+                suffix.to_string(),
+                ModSettingsNode::Setting(TogglableSetting {
+                    pair: pair.clone(),
                     include: false,
-                },
-            ));
+                }),
+            ))
         }
-
-        for (_, group) in groups.iter_mut() {
-            group.0.sort_by_key(|e| e.0.clone());
-        }
-        let mut grouped = groups
-            .iter()
-            .map(|e| (e.0.clone(), e.1.clone()))
-            .collect::<Vec<_>>();
-        grouped.sort_by_key(|e| e.0.clone());
-        grouped
+        tree
     }
 }
 
