@@ -56,8 +56,8 @@ struct ModPackConfig {
 }
 
 pub struct App<'a, 'b> {
-    mod_list: ModListConfig,
-    mod_pack: ModPackConfig,
+    list_config: ModListConfig,
+    pack_config: ModPackConfig,
 
     mod_config: &'a Path,
     mods_dir: Option<&'a Path>,
@@ -78,12 +78,12 @@ pub struct ModConfigItem {
 
 impl App<'_, '_> {
     fn render_modpack_panel(&mut self, ui: &mut Ui) -> anyhow::Result<()> {
-        if self.mod_pack.row_rect == None {
-            if let Some(pack) = self.mod_pack.modpacks.get_mut(0) {
-                self.mod_pack.row_rect = Some(
+        if self.pack_config.row_rect == None {
+            if let Some(pack) = self.pack_config.modpacks.get_mut(0) {
+                self.pack_config.row_rect = Some(
                     pack.render(
                         ui,
-                        &mut self.mod_list,
+                        &mut self.list_config,
                         &mut "".to_owned(),
                         &HashSet::new(),
                         false,
@@ -98,14 +98,14 @@ impl App<'_, '_> {
 
         ui.horizontal(|ui| {
             ui.label("Search");
-            ui.text_edit_singleline(&mut self.mod_pack.name);
+            ui.text_edit_singleline(&mut self.pack_config.name);
         });
         if ui.button("Export as modpack").clicked() {
             let pack = ModPack::new(
-                self.mod_pack.name.clone(),
-                self.mod_pack.name.clone(),
+                self.pack_config.name.clone(),
+                self.pack_config.name.clone(),
                 &self
-                    .mod_list
+                    .list_config
                     .mods
                     .iter()
                     .filter(|e| {
@@ -119,30 +119,31 @@ impl App<'_, '_> {
                     .collect::<Vec<_>>(),
                 &Default::default(),
             );
-            let path = Path::new("./modpacks/").join(&self.mod_pack.name);
-            pack.save(BufWriter::new(
-                File::create(path).context(format!("Creating modpack {}", &self.mod_pack.name))?,
-            ))
-            .context(format!("Saving modpack {}", &self.mod_pack.name))?;
+            let path = Path::new("./modpacks/").join(&self.pack_config.name);
+            pack.save(BufWriter::new(File::create(path).context(format!(
+                "Creating modpack {}",
+                &self.pack_config.name
+            ))?))
+            .context(format!("Saving modpack {}", &self.pack_config.name))?;
             if let Some(found) = self
-                .mod_pack
+                .pack_config
                 .modpacks
                 .iter_mut()
                 .find(|e| e.file_name() == pack.file_name())
             {
                 *found = pack;
             } else {
-                self.mod_pack.modpacks.push(pack);
+                self.pack_config.modpacks.push(pack);
             }
         }
         egui::ScrollArea::vertical()
             .auto_shrink(false)
             .show(ui, |ui| {
                 let mut error = None;
-                let searching_name = self.mod_pack.name.clone();
+                let searching_name = self.pack_config.name.clone();
                 Grid::new("Modpack Grid").striped(false).show(ui, |ui| {
                     for (i, modpack) in self
-                        .mod_pack
+                        .pack_config
                         .modpacks
                         .iter()
                         .filter(|e| e.name().contains(&searching_name))
@@ -151,11 +152,11 @@ impl App<'_, '_> {
                         if let Some(err) = modpack
                             .render(
                                 ui,
-                                &mut self.mod_list,
-                                &mut self.mod_pack.name,
-                                &self.mod_pack.installed_mods,
+                                &mut self.list_config,
+                                &mut self.pack_config.name,
+                                &self.pack_config.installed_mods,
                                 i % 2 == 0,
-                                self.mod_pack.row_rect,
+                                self.pack_config.row_rect,
                             )
                             .inner
                         {
@@ -176,19 +177,19 @@ impl App<'_, '_> {
         egui::ScrollArea::vertical()
             .auto_shrink(false)
             .show(ui, |ui| {
-                self.mod_list.mod_settings.render(ui);
+                self.list_config.mod_settings.render(ui);
             });
     }
 
     fn render_mods_panel(&mut self, ui: &mut Ui) {
         if self.row_rect == None {
-            if let Some(nmod) = self.mod_list.mods.get_mut(0) {
+            if let Some(nmod) = self.list_config.mods.get_mut(0) {
                 self.row_rect = Some(nmod.render(ui, self.init_errored).full_rect);
                 ui.ctx().request_repaint();
             }
         }
 
-        let cur_search = self.mod_list.search.clone();
+        let cur_search = self.list_config.search.clone();
         let conditions_err: Vec<_> = cur_search
             .split(" ")
             .map(|x| (x, Condition::new(x)))
@@ -202,7 +203,7 @@ impl App<'_, '_> {
         let conditions: &Vec<_> = &conditions_err.iter().filter_map(|x| x.1.clone()).collect();
         ui.horizontal(|ui| {
             ui.label("Search");
-            ui.text_edit_singleline(&mut self.mod_list.search)
+            ui.text_edit_singleline(&mut self.list_config.search)
                 .on_hover_text(Condition::special_terms());
             if !broken_terms.is_empty() {
                 ui.label("Broken search terms: ");
@@ -264,7 +265,7 @@ impl App<'_, '_> {
             ))?;
             packs.push(pack);
         }
-        self.mod_pack.modpacks = packs;
+        self.pack_config.modpacks = packs;
         Ok(())
     }
 
@@ -284,7 +285,7 @@ impl App<'_, '_> {
                     return;
                 }
                 let filtered_mods = self
-                    .mod_list
+                    .list_config
                     .mods
                     .iter()
                     .enumerate()
@@ -301,7 +302,7 @@ impl App<'_, '_> {
                         .collect::<Vec<_>>()
                         .get(0)
                         .map(|e| e.0)
-                        .unwrap_or(self.mod_list.mods.len()) // if we drag it to the bottom when filtered we probably want it at the end of the modlist
+                        .unwrap_or(self.list_config.mods.len()) // if we drag it to the bottom when filtered we probably want it at the end of the modlist
                 };
 
                 let from_mod_idx = filtered_mods
@@ -309,14 +310,14 @@ impl App<'_, '_> {
                     .expect("Dragged mod should exist")
                     .0;
 
-                let source = self.mod_list.mods.remove(from_mod_idx);
+                let source = self.list_config.mods.remove(from_mod_idx);
                 if target_mod_idx >= from_mod_idx {
                     target_mod_idx -= 1;
                 }
-                if target_mod_idx >= self.mod_list.mods.len() {
-                    self.mod_list.mods.push(source);
+                if target_mod_idx >= self.list_config.mods.len() {
+                    self.list_config.mods.push(source);
                 } else {
-                    self.mod_list.mods.insert(target_mod_idx, source);
+                    self.list_config.mods.insert(target_mod_idx, source);
                 }
             }
         }
@@ -329,7 +330,7 @@ impl App<'_, '_> {
         do_dnd: bool,
     ) -> InnerResponse<Option<usize>> {
         ui.scope(|ui| {
-            self.mod_list
+            self.list_config
                 .mods
                 .iter_mut()
                 .filter(|x| x.matches(conditions))
@@ -600,13 +601,13 @@ impl App<'_, '_> {
                 .context(format!("Opening mod config {}", self.mod_config.display()))?,
         ))
         .context(format!("Parsing mod config {}", self.mod_config.display()))?;
-        self.mod_list.mods = Self::sort_mods(&mods, &config).context("Sorting mods")?;
+        self.list_config.mods = Self::sort_mods(&mods, &config).context("Sorting mods")?;
 
         let file = BufReader::new(File::open(self.mod_settings_file).context(format!(
             "Opening mod settings {}",
             self.mod_settings_file.display()
         ))?);
-        self.mod_list.mod_settings = ModSettings::load(
+        self.list_config.mod_settings = ModSettings::load(
             file,
             fs::metadata(self.mod_settings_file)
                 .context(format!(
@@ -623,12 +624,12 @@ impl App<'_, '_> {
             .context("Loading modpacks")?;
         // mod_settings.save(BufWriter::new(File::create("./saved_settings")?))?;
         let installed = self
-            .mod_list
+            .list_config
             .mods
             .iter()
             .map(|e| e.id.clone())
             .collect::<HashSet<_>>();
-        self.mod_pack.installed_mods = installed;
+        self.pack_config.installed_mods = installed;
         Ok(())
     }
 
@@ -640,7 +641,7 @@ impl App<'_, '_> {
     ) -> anyhow::Result<App<'a, 'b>> {
         Ok(App {
             mod_config,
-            mod_list: ModListConfig {
+            list_config: ModListConfig {
                 search: "".to_owned(),
                 mods: Vec::new(),
                 mod_settings: Default::default(),
@@ -651,7 +652,7 @@ impl App<'_, '_> {
             popups: Vec::new(),
             global_id: 0,
             row_rect: None,
-            mod_pack: ModPackConfig {
+            pack_config: ModPackConfig {
                 name: "".to_owned(),
                 modpacks: Vec::new(),
                 row_rect: None,
@@ -692,7 +693,7 @@ impl App<'_, '_> {
     fn save_mods(&self) -> anyhow::Result<()> {
         let buf = "<Mods>\n".to_string()
                     + &self
-                        .mod_list.mods
+                        .list_config.mods
                         .iter()
                         .map(|x| {
                             let id = &x.id;
