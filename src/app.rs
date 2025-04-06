@@ -135,36 +135,41 @@ impl App<'_, '_> {
                 self.mod_pack.modpacks.push(pack);
             }
         }
-        let mut error = None;
-        let searching_name = self.mod_pack.name.clone();
-        Grid::new("Modpack Grid").striped(false).show(ui, |ui| {
-            for (i, modpack) in self
-                .mod_pack
-                .modpacks
-                .iter()
-                .filter(|e| e.name().contains(&searching_name))
-                .enumerate()
-            {
-                if let Some(err) = modpack
-                    .render(
-                        ui,
-                        &mut self.mod_list,
-                        &mut self.mod_pack.name,
-                        &self.mod_pack.installed_mods,
-                        i % 2 == 0,
-                        self.mod_pack.row_rect,
-                    )
-                    .inner
-                {
-                    error = Some(err);
+        egui::ScrollArea::vertical()
+            .auto_shrink(false)
+            .show(ui, |ui| {
+                let mut error = None;
+                let searching_name = self.mod_pack.name.clone();
+                Grid::new("Modpack Grid").striped(false).show(ui, |ui| {
+                    for (i, modpack) in self
+                        .mod_pack
+                        .modpacks
+                        .iter()
+                        .filter(|e| e.name().contains(&searching_name))
+                        .enumerate()
+                    {
+                        if let Some(err) = modpack
+                            .render(
+                                ui,
+                                &mut self.mod_list,
+                                &mut self.mod_pack.name,
+                                &self.mod_pack.installed_mods,
+                                i % 2 == 0,
+                                self.mod_pack.row_rect,
+                            )
+                            .inner
+                        {
+                            error = Some(err);
+                        }
+                        ui.end_row();
+                    }
+                });
+                if let Some(err) = error {
+                    self.create_error(anyhow!(err));
                 }
-                ui.end_row();
-            }
-        });
-        if let Some(err) = error {
-            self.create_error(anyhow!(err));
-        }
-        Ok(())
+                Ok(())
+            })
+            .inner
     }
 
     fn render_mod_settings_panel(&mut self, ui: &mut Ui) {
@@ -731,10 +736,13 @@ impl eframe::App for App<'_, '_> {
 
         egui::SidePanel::right(Id::new("Right Panel")).show(ctx, |ui| {
             self.render_mod_settings_panel(ui);
-
-            let res = self.render_modpack_panel(ui);
-            self.result_popup(res)
         });
+        egui::TopBottomPanel::bottom(Id::new("Modpack Panel"))
+            .resizable(true)
+            .show(ctx, |ui| {
+                let res = self.render_modpack_panel(ui);
+                self.result_popup(res)
+            });
 
         egui::CentralPanel::default().show(ctx, |ui| self.render_mods_panel(ui));
     }
