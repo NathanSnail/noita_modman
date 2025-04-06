@@ -75,6 +75,15 @@ enum ModSettingsNode {
 }
 
 impl ModSettingsGroup {
+    pub fn all_included(&self) -> bool {
+        self.0.iter().fold(true, |acc, e| {
+            acc && match &e.1 {
+                ModSettingsNode::Group(mod_settings_group) => mod_settings_group.all_included(),
+                ModSettingsNode::Setting(togglable_setting) => togglable_setting.include,
+            }
+        })
+    }
+
     pub fn render(&mut self, ui: &mut Ui) {
         const INCLUDE_INFO: &'static str = "Included settings are exported with the modpack\nWhen a modpack is imported only exported settings will be applied";
         ui.horizontal(|ui| {
@@ -83,14 +92,14 @@ impl ModSettingsGroup {
                 .on_hover_text("Include all children of this node\n".to_string() + INCLUDE_INFO)
                 .clicked()
             {
-                self.set_all(true);
+                self.include_all(true);
             }
             if ui
                 .button("Exclude All")
                 .on_hover_text("Exclude all children of this node\n".to_string() + INCLUDE_INFO)
                 .clicked()
             {
-                self.set_all(false);
+                self.include_all(false);
             }
         });
         for (key, setting) in self.0.iter_mut() {
@@ -98,11 +107,28 @@ impl ModSettingsGroup {
                 ModSettingsNode::Group(mod_settings_group) => {
                     ui.push_id(Id::new(key as &str), |ui| {
                         let captured_key = key.clone();
-                        CollapsingUi::new(
+                        let captured_checked = mod_settings_group.all_included();
+                        let check_include = CollapsingUi::new(
                             Id::new("Top"),
-                            Box::new(move |ui: &mut Ui| -> Response { ui.label(&captured_key) }),
+                            Box::new(move |ui| {
+                                ui.scope(|ui| {
+                                    let mut checked = captured_checked;
+                                    ui.checkbox(&mut checked, &captured_key);
+                                    if checked != captured_checked {
+                                        Some(checked)
+                                    } else {
+                                        None
+                                    }
+                                })
+                            }),
                         )
-                        .show(ui, |ui| mod_settings_group.render(ui));
+                        .show(ui, |ui| mod_settings_group.render(ui))
+                        .inner;
+
+                        match check_include {
+                            Some(check) => mod_settings_group.include_all(check),
+                            None => (),
+                        }
                     });
                 }
                 ModSettingsNode::Setting(togglable_setting) => {
@@ -169,10 +195,12 @@ impl ModSettingsGroup {
         }
     }
 
-    pub fn set_all(&mut self, include: bool) {
+    pub fn include_all(&mut self, include: bool) {
         for (_, setting) in self.0.iter_mut() {
             match setting {
-                ModSettingsNode::Group(mod_settings_group) => mod_settings_group.set_all(include),
+                ModSettingsNode::Group(mod_settings_group) => {
+                    mod_settings_group.include_all(include)
+                }
                 ModSettingsNode::Setting(togglable_setting) => togglable_setting.include = include,
             }
         }
