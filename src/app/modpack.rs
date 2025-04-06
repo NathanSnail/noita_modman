@@ -73,7 +73,7 @@ impl ModSettingGroup {
 #[derive(Clone, Debug, PartialEq, Default)]
 pub struct ModSettings {
     values: HashMap<String, ModSettingPair>,
-    state: Vec<(String, ModSettingGroup)>,
+    grouped: Vec<(String, ModSettingGroup)>,
 }
 
 #[derive(Clone, Debug)]
@@ -480,11 +480,10 @@ impl ModSettings {
         if num_entries != expected_num_entries {
             bail!("Expected {expected_num_entries} but there were {num_entries}");
         }
-        let mut settings = ModSettings {
+        let settings = ModSettings {
+            grouped: Self::compute_grouped(&settings),
             values: settings,
-            ..Default::default()
         };
-        settings.compute_state();
         Ok(settings)
     }
 
@@ -503,16 +502,16 @@ impl ModSettings {
     }
 
     pub fn render(&self, ui: &mut Ui) {
-        for (prefix, group) in self.state.iter() {
+        for (prefix, group) in self.grouped.iter() {
             CollapsingHeader::new(prefix).show(ui, |ui| {
                 group.render(ui);
             });
         }
     }
 
-    fn compute_state(&mut self) {
+    fn compute_grouped(map: &HashMap<String, ModSettingPair>) -> Vec<(String, ModSettingGroup)> {
         let mut groups: HashMap<String, ModSettingGroup> = HashMap::new();
-        for (key, value) in self.values.iter() {
+        for (key, value) in map.iter() {
             let mut parts = key.split('.');
             let prefix = parts.nth(0).unwrap();
             let suffix = parts.fold("".to_string(), |acc, e| acc + "." + e);
@@ -524,14 +523,16 @@ impl ModSettings {
             };
             group.0.push((suffix, value.clone()));
         }
-        for group in groups.iter_mut() {
-            group.1 .0.sort_by_key(|e| e.0.clone());
+
+        for (_, group) in groups.iter_mut() {
+            group.0.sort_by_key(|e| e.0.clone());
         }
-        self.state = groups
+        let mut grouped = groups
             .iter()
             .map(|e| (e.0.clone(), e.1.clone()))
             .collect::<Vec<_>>();
-        self.state.sort_by_key(|e| e.0.clone());
+        grouped.sort_by_key(|e| e.0.clone());
+        grouped
     }
 }
 
