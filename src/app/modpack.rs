@@ -22,6 +22,8 @@ use crate::{
     r#mod::{self, ModKind},
 };
 
+use super::SCALE;
+
 #[derive(Clone, Debug, PartialEq)]
 enum ModSettingValue {
     /// id 0
@@ -503,7 +505,7 @@ impl ModPack {
                 None
             };
 
-            ui.fixed_size_group(40.0, |ui| {
+            ui.fixed_size_group(40.0 * SCALE, |ui| {
                 if let Some(err) = &error {
                     ui.label(RichText::new(format!("{UNSAFE}")).color(YELLOW))
                         .on_hover_text(err);
