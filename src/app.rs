@@ -117,7 +117,7 @@ impl App<'_, '_> {
                     })
                     .map(|e| e.id.clone())
                     .collect::<Vec<_>>(),
-                &ModSettings::empty(),
+                &Default::default(),
             );
             let path = Path::new("./modpacks/").join(&self.mod_pack.name);
             pack.save(BufWriter::new(
@@ -638,7 +638,7 @@ impl App<'_, '_> {
             mod_list: ModListConfig {
                 search: "".to_owned(),
                 mods: Vec::new(),
-                mod_settings: ModSettings::empty(),
+                mod_settings: Default::default(),
             },
             mods_dir,
             workshop_dir,
