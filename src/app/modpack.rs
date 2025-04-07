@@ -1,6 +1,5 @@
 use quickcheck::{Arbitrary, Gen};
 use std::{
-    borrow::Borrow,
     cmp::max,
     collections::{HashMap, HashSet},
     io::{Read, Write},
@@ -8,7 +7,7 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Context, Error};
-use egui::{CollapsingHeader, Id, InnerResponse, Rect, Response, RichText, Ui};
+use egui::{Id, InnerResponse, Rect, RichText, Ui};
 use fastlz;
 
 use crate::{
@@ -19,7 +18,7 @@ use crate::{
         Endianness::{Big, Little},
     },
     icons::{UNSAFE, YELLOW},
-    r#mod::{self, ModKind},
+    r#mod::ModKind,
 };
 
 use super::SCALE;
@@ -382,21 +381,17 @@ impl ModPack {
         // TODO: make this fast with swaps
         let mut enabled_mods = Vec::new();
         let mut enabled_idxs = Vec::new();
-        mod_list_config
-            .mods
-            .iter_mut()
-            .enumerate()
-            .for_each(|(i, e)| {
-                if let ModKind::Normal(nmod) = &mut e.kind {
-                    if let Some(v) = enabled.get(&e.id) {
-                        nmod.enabled = true;
-                        enabled_mods.push((e.clone(), *v));
-                        enabled_idxs.push(i);
-                    } else {
-                        nmod.enabled = false;
-                    }
+        for (i, nmod) in mod_list_config.mods.iter_mut().enumerate() {
+            if let ModKind::Normal(normal_mod) = &mut nmod.kind {
+                if let Some(v) = enabled.get(&nmod.id) {
+                    normal_mod.enabled = true;
+                    enabled_mods.push((nmod.clone(), *v));
+                    enabled_idxs.push(i);
+                } else {
+                    normal_mod.enabled = false;
                 }
-            });
+            }
+        }
 
         enabled_mods.sort_by_key(|e| e.1);
         for (nmod, idx) in zip(enabled_mods, enabled_idxs) {
