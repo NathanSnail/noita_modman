@@ -1,7 +1,7 @@
 use egui::{
     collapsing_header::{paint_default_icon, CollapsingState},
-    epaint, pos2, vec2, CollapsingResponse, Id, InnerResponse, NumExt, Rect, Response, Sense,
-    StrokeKind, Ui, WidgetInfo, WidgetType,
+    epaint, pos2, CollapsingResponse, Id, InnerResponse, Rect, Response, Sense, StrokeKind, Ui,
+    WidgetInfo, WidgetType,
 };
 
 struct Prepared<T> {
