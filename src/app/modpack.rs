@@ -67,7 +67,7 @@ pub struct TogglableSetting {
 }
 
 #[derive(Clone, Debug, PartialEq, Default)]
-struct ModSettingsGroup(Vec<(String, ModSettingsNode)>);
+pub struct ModSettingsGroup(Vec<(String, ModSettingsNode)>);
 
 #[derive(Clone, Debug, PartialEq)]
 enum ModSettingsNode {
@@ -76,6 +76,22 @@ enum ModSettingsNode {
 }
 
 impl ModSettingsGroup {
+    pub fn to_set(&self) -> HashSet<String> {
+        let mut set = HashSet::new();
+        for child in self.0.iter() {
+            let child_set = match &child.1 {
+                ModSettingsNode::Group(mod_settings_group) => mod_settings_group
+                    .to_set()
+                    .iter()
+                    .map(|e| ".".to_string() + e)
+                    .collect(),
+                ModSettingsNode::Setting(_) => HashSet::new(),
+            };
+            set = set.union(&child_set).map(|e| child.0.clone() + e).collect();
+        }
+        set
+    }
+
     pub fn all_included(&self) -> bool {
         self.0.iter().fold(true, |acc, e| {
             acc && match &e.1 {
@@ -416,7 +432,7 @@ impl ModPack {
         }
     }
 
-    pub fn save<W: Write>(&self, mut writer: W) -> anyhow::Result<()> {
+    pub fn save<W: Write>(&self, mut writer: W, include: &ModSettingsGroup) -> anyhow::Result<()> {
         (|| {
             writer
                 .write_le::<usize>(0)
@@ -441,7 +457,8 @@ impl ModPack {
                 .write_le::<usize>(self.settings.values.len())
                 .context("Writing modpack number of settings")?;
 
-            for (key, values) in &self.settings.values {
+            let set = include.to_set();
+            for (key, values) in self.settings.values.iter().filter(|(key, _)| set.contains(*key)) {
                 ModSetting {
                     key: key.clone(),
                     values: values.clone(),
@@ -654,6 +671,10 @@ impl ModSettings {
         }
         tree.sort();
         tree
+    }
+
+    pub fn grouped(&self) -> &ModSettingsGroup {
+        &self.grouped
     }
 }
 

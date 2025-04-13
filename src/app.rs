@@ -141,7 +141,7 @@ impl<'d, 'e, 'f> App<'d, 'e, 'f> {
             pack.save(BufWriter::new(File::create(path).context(format!(
                 "Creating modpack {}",
                 &self.pack_config.name
-            ))?))
+            ))?), self.list_config.mod_settings.grouped())
             .context(format!("Saving modpack {}", &self.pack_config.name))?;
             if let Some(found) = self
                 .pack_config
