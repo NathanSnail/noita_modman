@@ -11,7 +11,7 @@ use egui::{
     emath, vec2, Button, Color32, DragAndDrop, FontFamily, FontId, Grid, Id, InnerResponse,
     LayerId, Order, Rangef, Rect, Sense, TextStyle, Ui, UiBuilder, Window,
 };
-use modpack::{ModPack, ModSettings};
+use modpack::{modsettings::ModSettings, ModPack};
 
 use xmltree::{Element, XMLNode};
 
@@ -138,10 +138,13 @@ impl<'d, 'e, 'f> App<'d, 'e, 'f> {
                 &Default::default(),
             );
             let path = Path::new("./modpacks/").join(&self.pack_config.name);
-            pack.save(BufWriter::new(File::create(path).context(format!(
-                "Creating modpack {}",
-                &self.pack_config.name
-            ))?), self.list_config.mod_settings.grouped())
+            pack.save(
+                BufWriter::new(
+                    File::create(path)
+                        .context(format!("Creating modpack {}", &self.pack_config.name))?,
+                ),
+                self.list_config.mod_settings.grouped(),
+            )
             .context(format!("Saving modpack {}", &self.pack_config.name))?;
             if let Some(found) = self
                 .pack_config
