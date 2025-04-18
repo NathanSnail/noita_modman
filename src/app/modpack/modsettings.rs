@@ -1,27 +1,14 @@
 use quickcheck::{Arbitrary, Gen};
 use std::{
-    cmp::max,
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     io::{Read, Write},
     iter::{empty, zip},
 };
 
-use anyhow::{anyhow, bail, Context, Error};
-use egui::{Id, InnerResponse, Rect, RichText, Ui};
-use fastlz;
+use anyhow::{anyhow, Context};
+use egui::Ui;
 
-use crate::{
-    app::{ModListConfig, UiSizedExt},
-    collapsing_ui::CollapsingUi,
-    ext::{
-        ByteReaderExt, ByteVec, ByteWriterExt,
-        Endianness::{Big, Little},
-    },
-    icons::{UNSAFE, YELLOW},
-    r#mod::ModKind,
-};
-
-use super::SCALE;
+use crate::ext::{ByteReaderExt, ByteWriterExt, Endianness::Big};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum ModSettingValue {
