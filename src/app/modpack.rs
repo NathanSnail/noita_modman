@@ -1,10 +1,9 @@
 use modsettings::{ModSetting, ModSettingPair, ModSettingValue, ModSettings};
-use quickcheck::{Arbitrary, Gen};
 use std::{
     cmp::max,
     collections::{HashMap, HashSet},
     io::{Read, Write},
-    iter::{empty, zip},
+    iter::zip,
 };
 
 use anyhow::{anyhow, bail, Context, Error};
