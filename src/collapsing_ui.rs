@@ -60,9 +60,9 @@ impl<T> CollapsingUi<T> {
         } = self;
 
         let id = ui.make_persistent_id(id_salt);
-        let button_padding = ui.spacing().button_padding;
 
         ui.horizontal(|ui| {
+            let button_padding = ui.spacing().button_padding;
             let icon_minimal = ui.allocate_space(button_padding);
 
             let (mut icon_rect, _) = ui.spacing().icon_rectangles(icon_minimal.1);
