@@ -7,7 +7,7 @@ use std::{
 };
 
 use anyhow::{anyhow, bail, Context, Error};
-use egui::{Id, InnerResponse, Rect, RichText, Ui};
+use egui::{pos2, Id, InnerResponse, Rect, RichText, Sense, Ui};
 use fastlz;
 
 use crate::{
@@ -110,8 +110,22 @@ impl ModSettingsGroup {
                 }
                 ModSettingsNode::Setting(togglable_setting) => {
                     let mut include = togglable_setting.include;
-                    ui.checkbox(&mut include, key as &str).on_hover_ui(|ui| {
-                        togglable_setting.pair.render(ui);
+                    ui.horizontal(|ui| {
+                        let button_padding = ui.spacing().button_padding;
+                        let icon_minimal = ui.allocate_space(button_padding);
+
+                        let (mut icon_rect, _) = ui.spacing().icon_rectangles(icon_minimal.1);
+
+                        icon_rect.set_center(pos2(
+                            icon_rect.left() + ui.spacing().indent / 2.0,
+                            icon_rect.center().y,
+                        ));
+
+                        ui.allocate_rect(icon_rect, Sense::click()); // TODO: remove the sense if possible, also perhaps pull the creating out into its own function
+
+                        ui.checkbox(&mut include, key as &str).on_hover_ui(|ui| {
+                            togglable_setting.pair.render(ui);
+                        });
                     });
                     togglable_setting.include = include;
                 }
