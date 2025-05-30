@@ -167,6 +167,10 @@ impl<'d, 'e, 'f> App<'d, 'e, 'f> {
                         .filter(|e| e.name().contains(&searching_name))
                         .enumerate()
                     {
+                        // if we just saved the first pack then row rect can be in a bad state here, just draw a frame later
+                        if self.pack_config.row_rect == None {
+                            return;
+                        }
                         if let Some(err) = modpack
                             .render(
                                 ui,
