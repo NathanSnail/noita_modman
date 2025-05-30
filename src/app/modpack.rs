@@ -39,7 +39,33 @@ enum ModSettingsNode {
     Setting(TogglableSetting),
 }
 
+impl ModSettingsNode {
+    pub fn apply_set(&mut self, set: &HashSet<String>, path: String) {
+        match self {
+            ModSettingsNode::Group(mod_settings_group) => {
+                mod_settings_group.apply_set(set, path);
+            }
+            ModSettingsNode::Setting(togglable_setting) => {
+                togglable_setting.include = set.contains(&path);
+            }
+        }
+    }
+}
+
 impl ModSettingsGroup {
+    pub fn apply_set(&mut self, set: &HashSet<String>, path: String) {
+        self.0.iter_mut().for_each(|e| {
+            e.1.apply_set(
+                set,
+                if path == "" {
+                    e.0.clone()
+                } else {
+                    path.clone() + "." + &e.0
+                },
+            )
+        })
+    }
+
     pub fn to_set(&self) -> HashSet<String> {
         let mut set = HashSet::new();
         for child in self.0.iter() {
@@ -352,7 +378,9 @@ impl ModPack {
                 .insert(key.clone(), values.clone());
         }
 
-        mod_list_config.mod_settings.recompute_grouped();
+        mod_list_config
+            .mod_settings
+            .recompute_grouped(&self.settings.values.iter().map(|e| e.0.clone()).collect());
     }
 
     pub fn load<R: Read>(mut reader: R, file_name: String) -> anyhow::Result<ModPack> {
@@ -613,12 +641,9 @@ impl ModSettings {
         tree
     }
 
-    pub fn grouped(&self) -> &ModSettingsGroup {
-        &self.grouped
-    }
-
-    pub fn recompute_grouped(&mut self) {
+    pub fn recompute_grouped(&mut self, set: &HashSet<String>) {
         self.grouped = Self::compute_grouped(&self.values);
+        self.grouped.apply_set(set, "".to_owned());
     }
 }
 
