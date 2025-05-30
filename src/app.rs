@@ -756,7 +756,10 @@ impl<'d, 'e, 'f> App<'d, 'e, 'f> {
                         .reduce(|a, b| a + &b).unwrap_or("".to_owned()) + "</Mods>";
         let mut file = File::create(self.mod_config).context("Opening mod config for saving")?;
         write!(file, "{}", buf).context("Writing to mod config")?;
-        file.flush().context("Flushing file")?;
+        file.flush().context("Flushing config file")?;
+        let mut file = File::create(self.mod_settings_file).context("Opening mod setting for saving")?;
+        self.list_config.mod_settings.save(&mut file).context("Saving mod settings")?;
+        file.flush().context("Flushing settings file")?;
         Ok(())
     }
 }
