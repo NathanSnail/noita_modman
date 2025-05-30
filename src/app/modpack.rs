@@ -43,15 +43,26 @@ impl ModSettingsGroup {
     pub fn to_set(&self) -> HashSet<String> {
         let mut set = HashSet::new();
         for child in self.0.iter() {
-            let child_set = match &child.1 {
+            for elem in match &child.1 {
                 ModSettingsNode::Group(mod_settings_group) => mod_settings_group
                     .to_set()
                     .iter()
                     .map(|e| ".".to_string() + e)
                     .collect(),
-                ModSettingsNode::Setting(_) => HashSet::new(),
-            };
-            set = set.union(&child_set).map(|e| child.0.clone() + e).collect();
+                ModSettingsNode::Setting(TogglableSetting {
+                    pair: _,
+                    include: true,
+                }) => HashSet::from_iter(["".to_owned()]),
+                ModSettingsNode::Setting(TogglableSetting {
+                    pair: _,
+                    include: false,
+                }) => HashSet::new(),
+            }
+            .iter()
+            .map(|e| child.0.clone() + e)
+            {
+                set.insert(elem);
+            }
         }
         set
     }
@@ -340,6 +351,8 @@ impl ModPack {
                 .values
                 .insert(key.clone(), values.clone());
         }
+
+        mod_list_config.mod_settings.recompute_grouped();
     }
 
     pub fn load<R: Read>(mut reader: R, file_name: String) -> anyhow::Result<ModPack> {
@@ -352,7 +365,7 @@ impl ModPack {
         }
     }
 
-    pub fn save<W: Write>(&self, mut writer: W, include: &ModSettingsGroup) -> anyhow::Result<()> {
+    pub fn save<W: Write>(&self, mut writer: W) -> anyhow::Result<()> {
         (|| {
             writer
                 .write_le::<usize>(0)
@@ -373,17 +386,19 @@ impl ModPack {
                     .context("Writing mod name")?;
             }
 
-            writer
-                .write_le::<usize>(self.settings.values.len())
-                .context("Writing modpack number of settings")?;
-
-            let set = include.to_set();
-            for (key, values) in self
+            let set = self.settings.grouped.to_set();
+            let saved_settings = self
                 .settings
                 .values
                 .iter()
                 .filter(|(key, _)| set.contains(*key))
-            {
+                .collect::<Vec<_>>();
+
+            writer
+                .write_le::<usize>(saved_settings.len())
+                .context("Writing modpack number of settings")?;
+
+            for (key, values) in saved_settings.into_iter() {
                 ModSetting {
                     key: key.clone(),
                     values: values.clone(),
@@ -577,7 +592,7 @@ impl ModSettings {
         self.grouped.render(ui);
     }
 
-    fn compute_grouped(map: &HashMap<String, ModSettingPair>) -> ModSettingsGroup {
+    pub fn compute_grouped(map: &HashMap<String, ModSettingPair>) -> ModSettingsGroup {
         let mut tree: ModSettingsGroup = ModSettingsGroup(Default::default());
         for (key, pair) in map.iter() {
             let parts = key.split('.').collect::<Vec<_>>();
@@ -600,6 +615,10 @@ impl ModSettings {
 
     pub fn grouped(&self) -> &ModSettingsGroup {
         &self.grouped
+    }
+
+    pub fn recompute_grouped(&mut self) {
+        self.grouped = Self::compute_grouped(&self.values);
     }
 }
 

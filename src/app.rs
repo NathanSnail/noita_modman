@@ -135,16 +135,13 @@ impl<'d, 'e, 'f> App<'d, 'e, 'f> {
                     })
                     .map(|e| e.id.clone())
                     .collect::<Vec<_>>(),
-                &Default::default(),
+                &self.list_config.mod_settings,
             );
             let path = Path::new("./modpacks/").join(&self.pack_config.name);
-            pack.save(
-                BufWriter::new(
-                    File::create(path)
-                        .context(format!("Creating modpack {}", &self.pack_config.name))?,
-                ),
-                self.list_config.mod_settings.grouped(),
-            )
+            pack.save(BufWriter::new(File::create(path).context(format!(
+                "Creating modpack {}",
+                &self.pack_config.name
+            ))?))
             .context(format!("Saving modpack {}", &self.pack_config.name))?;
             if let Some(found) = self
                 .pack_config
