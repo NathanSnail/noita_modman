@@ -3,37 +3,8 @@ name: release
 on: [push, pull_request]
 
 jobs:
-  build-mod:
-    runs-on: ubuntu-22.04
-    name: Build mod and ewext
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-        with:
-          targets: i686-pc-windows-gnu
-      - name: Install extra deps
-        run: sudo apt-get update && sudo apt-get install -y gcc-mingw-w64-i686
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: ewext -> target
-
-      - name: Build ewext
-        run: cargo build --release --target i686-pc-windows-gnu
-        working-directory: ./ewext
-      - name: Copy ewext
-        run: cp ewext/target/i686-pc-windows-gnu/release/ewext.dll quant.ew/ewext1.dll
-
-      - name: Create archive
-        run: python scripts/ci_make_archives.py mod
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: quant.ew.zip
-          path: target/quant.ew.zip
-
-  build-proxy-linux:
-    name: Build proxy for linux
+  build-manager-linux:
+    name: Build manager for linux
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
@@ -49,40 +20,15 @@ jobs:
 
       - name: Build Linux proxy release
         run: cargo build --release
-        working-directory: ./noita-proxy
-
-      - name: Create archives
-        run: python scripts/ci_make_archives.py linux
+        working-directory: .
 
       - uses: actions/upload-artifact@v4
         with:
-          name: noita-proxy-linux.zip
-          path: target/noita-proxy-linux.zip
+          name: linux_x86_64_noita_modman
+          path: target/release/noita_modman
 
-  build-proxy-macos:
-    name: Build proxy for macos
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@stable
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: noita-proxy -> target
-
-      - name: Build Macos proxy release
-        run: cargo build --release
-        working-directory: ./noita-proxy
-
-      - name: Create archives
-        run: python scripts/ci_make_archives.py macos
-
-      - uses: actions/upload-artifact@v4
-        with:
-          name: noita-proxy-macos-arm64.zip
-          path: target/noita-proxy-macos.zip
-  
-  build-proxy-windows:
-    name: Build proxy for windows
+  build-manager-windows:
+    name: Build manager for windows
     runs-on: windows-2019
     steps:
       - uses: actions/checkout@v4
@@ -93,15 +39,12 @@ jobs:
 
       - name: Build Windows proxy release
         run: cargo build --release
-        working-directory: ./noita-proxy
-
-      - name: Create archives
-        run: python scripts/ci_make_archives.py windows
+        working-directory: .
 
       - uses: actions/upload-artifact@v4
         with:
-          name: noita-proxy-win.zip
-          path: target/noita-proxy-win.zip
+          name: windows_x86_64_noita_modman.exe
+          path: target/release/noita_modman.exe
 
   release:
     name: Release
@@ -109,7 +52,7 @@ jobs:
     runs-on: ubuntu-22.04
     permissions:
       contents: write
-    needs: [build-mod, build-proxy-linux, build-proxy-windows]
+    needs: [build-manager-linux, build-manager-windows]
 
     steps:
       - uses: actions/checkout@v4
@@ -122,5 +65,5 @@ jobs:
       - uses: ncipollo/release-action@v1
         with:
           #draft: true
-          artifacts: "*.zip"
-          bodyFile: last_release_notes.md
+          artifacts: "*"
+          bodyFile: README.md
